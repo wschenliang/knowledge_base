@@ -1,0 +1,202 @@
+"""认证相关 API 路由"""
+
+from __future__ import annotations
+
+import logging
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from loguru import logger
+
+from app.auth import (
+    create_access_token,
+    decode_access_token,
+    hash_password,
+    verify_password,
+)
+from app.models.database import get_db
+from app.models.document import User
+
+router = APIRouter(prefix="/api/v1/auth", tags=["认证"])
+security = HTTPBearer()
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+    email: Optional[str] = None
+    display_name: Optional[str] = None
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user_id: str
+    username: str
+    role: str
+
+
+class UserResponse(BaseModel):
+    id: str
+    username: str
+    email: Optional[str] = None
+    display_name: Optional[str] = None
+    role: str
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """获取当前登录用户"""
+    payload = decode_access_token(credentials.credentials)
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的认证凭据",
+        )
+
+    user_id = payload.get("sub")
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="用户不存在",
+        )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="用户已被禁用",
+        )
+    return user
+
+
+@router.post("/register", response_model=TokenResponse)
+async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    """注册新用户"""
+    logger.info(f"收到注册请求: username={request.username}")
+    try:
+        # 检查用户名是否已存在
+        result = await db.execute(select(User).where(User.username == request.username))
+        if result.scalar_one_or_none():
+            logger.warning(f"注册失败: 用户名已存在 - {request.username}")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="用户名已存在",
+            )
+
+        # 检查邮箱是否已存在
+        if request.email:
+            result = await db.execute(select(User).where(User.email == request.email))
+            if result.scalar_one_or_none():
+                logger.warning(f"注册失败: 邮箱已被注册 - {request.email}")
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="邮箱已被注册",
+                )
+
+        user = User(
+            username=request.username,
+            hashed_password=hash_password(request.password),
+            email=request.email,
+            display_name=request.display_name or request.username,
+        )
+        db.add(user)
+        await db.flush()
+        await db.refresh(user)
+
+        logger.info(f"用户注册成功: id={user.id}, username={user.username}")
+
+        token = create_access_token(
+            user_id=user.id,
+            username=user.username,
+            role=user.role,
+        )
+
+        return TokenResponse(
+            access_token=token,
+            user_id=user.id,
+            username=user.username,
+            role=user.role,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.opt(exception=True).error(
+            f"注册失败 - username={request.username}, 错误: {e}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"注册失败: {str(e)}",
+        )
+
+
+@router.post("/login", response_model=TokenResponse)
+async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
+    """用户登录"""
+    logger.info(f"收到登录请求: username={request.username}")
+    try:
+        result = await db.execute(select(User).where(User.username == request.username))
+        user = result.scalar_one_or_none()
+
+        if user is None or not verify_password(request.password, user.hashed_password):
+            logger.warning(f"登录失败: 用户名或密码错误 - {request.username}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="用户名或密码错误",
+            )
+
+        if not user.is_active:
+            logger.warning(f"登录失败: 用户已被禁用 - {request.username}")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="用户已被禁用",
+            )
+
+        token = create_access_token(
+            user_id=user.id,
+            username=user.username,
+            role=user.role,
+        )
+
+        logger.info(f"用户登录成功: id={user.id}, username={user.username}")
+
+        return TokenResponse(
+            access_token=token,
+            user_id=user.id,
+            username=user.username,
+            role=user.role,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.opt(exception=True).error(
+            f"登录失败 - username={request.username}, 错误: {e}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"登录失败: {str(e)}",
+        )
+
+
+@router.get("/me", response_model=UserResponse)
+async def get_me(current_user: User = Depends(get_current_user)):
+    """获取当前用户信息"""
+    return UserResponse(
+        id=current_user.id,
+        username=current_user.username,
+        email=current_user.email,
+        display_name=current_user.display_name,
+        role=current_user.role,
+    )

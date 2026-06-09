@@ -1,0 +1,57 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "title": "企业知识库监控",
+  "version": 1,
+  "timezone": "browser",
+  "panels": [
+    {
+      "title": "API 请求速率",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(http_requests_total{job=\"knowledge_base_backend\"}[5m])",
+          "legendFormat": "{{method}} {{path}}"
+        }
+      ]
+    },
+    {
+      "title": "请求延迟 P50/P95/P99",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket[5m]))", "legendFormat": "P50" },
+        { "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))", "legendFormat": "P95" },
+        { "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))", "legendFormat": "P99" }
+      ]
+    },
+    {
+      "title": "HTTP 错误率",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"knowledge_base_backend\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"knowledge_base_backend\"}[5m])) * 100",
+          "legendFormat": "错误率 %"
+        }
+      ]
+    },
+    {
+      "title": "Qdrant 向量库状态",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "qdrant_points_count_total", "legendFormat": "向量总数" }
+      ]
+    },
+    {
+      "title": "活跃连接数",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "python_gc_objects_collected_total", "legendFormat": "GC 对象" }
+      ]
+    }
+  ]
+}
