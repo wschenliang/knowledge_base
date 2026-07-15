@@ -82,6 +82,7 @@ export default function PreviewModal({ document, isOpen, onClose }: PreviewModal
           }
         } catch (fallbackErr) {
           if (cancelled) return;
+          console.warn("纯文本兜底也失败:", fallbackErr);
           setError(
             err instanceof Error ? err.message : "加载失败"
           );
