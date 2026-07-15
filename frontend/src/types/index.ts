@@ -189,3 +189,10 @@ export interface AuditLogQueryParams {
   skip?: number;
   limit?: number;
 }
+
+// ===== 文档预览 =====
+
+export interface PreviewResponse {
+  content: string;
+  format: string;
+}

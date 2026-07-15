@@ -23,6 +23,7 @@ import type {
   AuditLogItem,
   AuditLogListResponse,
   AuditLogQueryParams,
+  PreviewResponse,
 } from "@/types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -162,6 +163,29 @@ class ApiClient {
     return this.request<void>(`/api/v1/documents/${id}`, {
       method: "DELETE",
     });
+  }
+
+  // 文档预览
+  async downloadDocument(id: string): Promise<ArrayBuffer> {
+    const headers: Record<string, string> = {};
+    if (this.token) {
+      headers["Authorization"] = `Bearer ${this.token}`;
+    }
+
+    const response = await fetch(`${BASE_URL}/api/v1/documents/${id}/download`, {
+      headers,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+
+    return response.arrayBuffer();
+  }
+
+  async previewDocument(id: string): Promise<PreviewResponse> {
+    return this.request<PreviewResponse>(`/api/v1/documents/${id}/preview`);
   }
 
   // 问答
