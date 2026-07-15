@@ -24,6 +24,7 @@ import type {
   AuditLogListResponse,
   AuditLogQueryParams,
   PreviewResponse,
+  DashboardStats,
 } from "@/types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -354,6 +355,12 @@ class ApiClient {
     return this.request<AuditLogListResponse>(
       `/api/v1/admin/audit-logs${query ? `?${query}` : ""}`,
     );
+  }
+
+  // ===== Dashboard =====
+
+  async getDashboardStats(days: number = 7): Promise<DashboardStats> {
+    return this.request<DashboardStats>(`/api/v1/dashboard/stats?days=${days}`);
   }
 }
 

@@ -196,3 +196,57 @@ export interface PreviewResponse {
   content: string;
   format: string;
 }
+
+// ===== Dashboard 统计 =====
+
+export interface DashboardKPI {
+  total_users: number;
+  total_collections: number;
+  total_documents: number;
+  total_conversations: number;
+  total_messages: number;
+  today_messages: number;
+}
+
+export interface DailyCount {
+  date: string;
+  count: number;
+}
+
+export interface DashboardTrends {
+  daily_messages: DailyCount[];
+  daily_documents: DailyCount[];
+}
+
+export interface TopCollectionItem {
+  id: string;
+  name: string;
+  question_count: number;
+  document_count: number;
+  owner_username?: string | null;
+}
+
+export interface TopUserItem {
+  user_id: string;
+  username: string;
+  display_name?: string | null;
+  message_count: number;
+  conversation_count: number;
+}
+
+export interface TopQuestionItem {
+  query: string;
+  count: number;
+  last_asked_at?: string | null;
+}
+
+export interface DashboardStats {
+  scope: "admin" | "user";
+  range_days: number;
+  generated_at: string;
+  kpi: DashboardKPI;
+  trends: DashboardTrends;
+  top_collections: TopCollectionItem[];
+  top_users: TopUserItem[] | null;
+  top_questions: TopQuestionItem[];
+}
