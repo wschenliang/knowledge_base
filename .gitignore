@@ -36,3 +36,7 @@ docker-compose.override.yml
 node_modules/
 .next/
 out/
+
+backend/_*.db
+backend/_diag_*.py
+
