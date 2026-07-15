@@ -6,7 +6,10 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import Layout from "@/components/Layout";
 import DocumentList from "@/components/DocumentList";
-import type { Collection } from "@/types";
+import CollectionMemberManager from "@/components/CollectionMemberManager";
+import RoleBadge from "@/components/RoleBadge";
+import { canEdit } from "@/lib/permissions";
+import type { Collection, AclRole } from "@/types";
 import { ChevronRight, FileText, Calendar, Database, Home } from "lucide-react";
 import Link from "next/link";
 
@@ -16,6 +19,7 @@ export default function CollectionDetailPage() {
   const [collection, setCollection] = useState<Collection | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [tab, setTab] = useState<"overview" | "members">("overview");
 
   useEffect(() => {
     if (!authLoading && isAuthenticated && id) {
@@ -28,6 +32,8 @@ export default function CollectionDetailPage() {
   }, [authLoading, isAuthenticated, id]);
 
   if (authLoading) return null;
+
+  const myRole = collection?.my_role as AclRole | undefined;
 
   return (
     <Layout>
@@ -67,7 +73,10 @@ export default function CollectionDetailPage() {
                   <Database className="h-6 w-6 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h1 className="text-xl font-bold text-slate-900">{collection.name}</h1>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h1 className="text-xl font-bold text-slate-900">{collection.name}</h1>
+                    {myRole && <RoleBadge role={myRole} size="sm" />}
+                  </div>
                   {collection.description && (
                     <p className="mt-1 text-sm text-slate-500 leading-relaxed">{collection.description}</p>
                   )}
@@ -108,8 +117,44 @@ export default function CollectionDetailPage() {
               </div>
             </div>
 
-            {/* 文档管理 */}
-            <DocumentList collectionId={id} />
+            {/* Tab 切换 */}
+            <div className="mb-6 border-b border-slate-200">
+              <nav className="flex gap-6">
+                <button
+                  onClick={() => setTab("overview")}
+                  className={`relative pb-3 text-sm font-medium transition-colors ${
+                    tab === "overview"
+                      ? "text-blue-600"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  概览
+                  {tab === "overview" && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+                  )}
+                </button>
+                <button
+                  onClick={() => setTab("members")}
+                  className={`relative pb-3 text-sm font-medium transition-colors ${
+                    tab === "members"
+                      ? "text-blue-600"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  成员
+                  {tab === "members" && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+                  )}
+                </button>
+              </nav>
+            </div>
+
+            {tab === "overview" && (
+              <DocumentList collectionId={id} disabled={!canEdit(myRole)} />
+            )}
+            {tab === "members" && (
+              <CollectionMemberManager collectionId={id} myRole={myRole} />
+            )}
           </>
         ) : null}
       </div>

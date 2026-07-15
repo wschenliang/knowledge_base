@@ -7,9 +7,10 @@ import { Upload, Trash2, CheckCircle, Loader2, AlertCircle, FileText, Clock, Har
 
 interface Props {
   collectionId: string;
+  disabled?: boolean;
 }
 
-export default function DocumentList({ collectionId }: Props) {
+export default function DocumentList({ collectionId, disabled = false }: Props) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -49,12 +50,13 @@ export default function DocumentList({ collectionId }: Props) {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("确定要删除此文档吗？")) return;
-    try {
-      await api.deleteDocument(id);
-      setDocuments((prev) => prev.filter((d) => d.id !== id));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "删除失败");
+    if (confirm("确定要删除此文档吗？")) {
+      try {
+        await api.deleteDocument(id);
+        setDocuments((prev) => prev.filter((d) => d.id !== id));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "删除失败");
+      }
     }
   };
 
@@ -80,28 +82,44 @@ export default function DocumentList({ collectionId }: Props) {
   return (
     <div>
       {/* 上传区域 */}
-      <div className="mb-6 rounded-2xl border-2 border-dashed border-slate-200 bg-white p-8 text-center hover:border-blue-400 hover:bg-blue-50/30 transition-all duration-200 group">
-        <label className="cursor-pointer">
+      {disabled && (
+        <div className="mb-4 rounded-xl bg-amber-50 border border-amber-200 px-4 py-2.5 text-sm text-amber-700 flex items-center gap-2">
+          <div className="mt-1.5 h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+          你当前的角色为 只读访客，无法上传或删除文档。
+        </div>
+      )}
+      <div className={`mb-6 rounded-2xl border-2 border-dashed bg-white p-8 text-center transition-all duration-200 group ${
+        disabled
+          ? "border-slate-100 opacity-60 cursor-not-allowed"
+          : "border-slate-200 hover:border-blue-400 hover:bg-blue-50/30 cursor-pointer"
+      }`}>
+        <label className={disabled ? "cursor-not-allowed" : "cursor-pointer"}>
           <input
             type="file"
             className="hidden"
             accept=".txt,.pdf,.docx,.md,.html"
             onChange={handleUpload}
-            disabled={uploading}
+            disabled={uploading || disabled}
           />
           <div className="flex flex-col items-center gap-3">
             <div className={`flex h-14 w-14 items-center justify-center rounded-2xl transition-all duration-200 ${
               uploading
                 ? "bg-blue-100"
+                : disabled
+                ? "bg-slate-50"
                 : "bg-slate-100 group-hover:bg-blue-100"
             }`}>
               <Upload className={`h-6 w-6 transition-colors ${
-                uploading ? "text-blue-600 animate-bounce" : "text-slate-400 group-hover:text-blue-600"
+                uploading
+                  ? "text-blue-600 animate-bounce"
+                  : disabled
+                  ? "text-slate-300"
+                  : "text-slate-400 group-hover:text-blue-600"
               }`} />
             </div>
             <div>
               <p className="text-sm font-medium text-slate-700">
-                {uploading ? "正在上传..." : "点击上传文档"}
+                {uploading ? "正在上传..." : disabled ? "无上传权限" : "点击上传文档"}
               </p>
               <p className="mt-0.5 text-xs text-slate-400">
                 支持 TXT, PDF, DOCX, MD, HTML 格式
@@ -183,13 +201,15 @@ export default function DocumentList({ collectionId }: Props) {
                     </span>
                   </div>
                   <div className="col-span-1 flex justify-end">
-                    <button
-                      onClick={() => handleDelete(doc.id)}
-                      className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                      title="删除"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {!disabled && (
+                      <button
+                        onClick={() => handleDelete(doc.id)}
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                        title="删除"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               );

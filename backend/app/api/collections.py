@@ -62,10 +62,26 @@ async def list_collections(
     collections, total = await document_service.list_collections(
         db=db, user=current_user, skip=skip, limit=limit
     )
-    return CollectionList(
-        items=[CollectionResponse.model_validate(c) for c in collections],
-        total=total,
-    )
+
+    # 为每个 KB 附带当前用户角色
+    from app.services.permission_service import PermissionService
+
+    svc = PermissionService()
+    if current_user.role == "admin":
+        role_for_all = "owner"
+    else:
+        role_for_all = None
+
+    items: list[CollectionResponse] = []
+    for c in collections:
+        resp = CollectionResponse.model_validate(c)
+        if role_for_all is not None:
+            resp.my_role = role_for_all
+        else:
+            resp.my_role = await svc.get_role(current_user.id, c.id, db)
+        items.append(resp)
+
+    return CollectionList(items=items, total=total)
 
 
 @router.get("/{collection_id}", response_model=CollectionResponse)

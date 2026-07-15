@@ -1,8 +1,9 @@
 "use client";
 
-import type { Collection } from "@/types";
+import type { Collection, AclRole } from "@/types";
 import Link from "next/link";
 import { FileText, Calendar, ArrowRight } from "lucide-react";
+import RoleBadge from "./RoleBadge";
 
 // 根据 id 生成稳定的渐变色
 const gradients = [
@@ -30,6 +31,7 @@ interface Props {
 
 export default function CollectionCard({ collection }: Props) {
   const gradient = getGradient(collection.id);
+  const myRole = collection.my_role as AclRole | undefined;
 
   return (
     <Link
@@ -40,7 +42,7 @@ export default function CollectionCard({ collection }: Props) {
       <div className={`h-1.5 bg-gradient-to-r ${gradient}`} />
 
       <div className="p-5">
-        <div className="flex items-start justify-between mb-3">
+        <div className="flex items-start justify-between mb-3 gap-2">
           <div className="flex-1 min-w-0">
             <h3 className="text-base font-semibold text-slate-900 truncate group-hover:text-blue-700 transition-colors">
               {collection.name}
@@ -51,7 +53,10 @@ export default function CollectionCard({ collection }: Props) {
               </p>
             )}
           </div>
-          <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
+          <div className="flex items-center gap-2 shrink-0">
+            {myRole && <RoleBadge role={myRole} size="sm" />}
+            <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all" />
+          </div>
         </div>
 
         <div className="flex items-center gap-4 text-xs text-slate-500 pt-3 border-t border-slate-100">
