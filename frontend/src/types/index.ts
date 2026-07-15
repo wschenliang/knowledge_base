@@ -26,6 +26,7 @@ export interface Collection {
   document_count: number;
   created_at: string;
   updated_at: string;
+  my_role?: "owner" | "editor" | "viewer"; // 当前用户对此 KB 的 ACL 角色
 }
 
 export interface CollectionList {
@@ -123,4 +124,68 @@ export interface ConversationListResponse {
 
 export interface ConversationDetail extends ConversationItem {
   messages: ChatMessage[];
+}
+
+// ===== ACL 细粒度权限 =====
+export type AclRole = "owner" | "editor" | "viewer";
+
+export interface CollectionMember {
+  id: string;
+  user_id: string;
+  username: string;
+  display_name?: string | null;
+  role: AclRole;
+  granted_by?: string | null;
+  created_at: string;
+}
+
+export interface CollectionMemberListResponse {
+  items: CollectionMember[];
+  total: number;
+}
+
+export interface InviteMemberRequest {
+  username: string;
+  role: "editor" | "viewer";
+}
+
+export interface UpdateMemberRoleRequest {
+  role: AclRole;
+}
+
+export interface TransferOwnershipRequest {
+  new_owner_username: string;
+}
+
+export interface TransferOwnershipResponse {
+  old_owner_id: string;
+  new_owner_id: string;
+  collection_id: string;
+}
+
+// ===== 审计日志 =====
+export interface AuditLogItem {
+  id: number;
+  user_id?: string | null;
+  username?: string | null;
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  detail?: Record<string, unknown> | null;
+  ip_address?: string | null;
+  created_at: string;
+}
+
+export interface AuditLogListResponse {
+  items: AuditLogItem[];
+  total: number;
+}
+
+export interface AuditLogQueryParams {
+  user_id?: string;
+  action?: string;
+  resource_type?: string;
+  resource_id?: string;
+  skip?: number;
+  limit?: number;
 }

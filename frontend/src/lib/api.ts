@@ -14,6 +14,15 @@ import type {
   ConversationListResponse,
   ConversationDetail,
   ConversationItem,
+  CollectionMember,
+  CollectionMemberListResponse,
+  InviteMemberRequest,
+  UpdateMemberRoleRequest,
+  TransferOwnershipRequest,
+  TransferOwnershipResponse,
+  AuditLogItem,
+  AuditLogListResponse,
+  AuditLogQueryParams,
 } from "@/types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -256,6 +265,71 @@ class ApiClient {
       method: "PUT",
       body: JSON.stringify({ title }),
     });
+  }
+
+  // ===== ACL 细粒度权限管理 =====
+
+  async listCollectionMembers(collectionId: string): Promise<CollectionMemberListResponse> {
+    return this.request<CollectionMemberListResponse>(
+      `/api/v1/collections/${collectionId}/acl`
+    );
+  }
+
+  async inviteCollectionMember(
+    collectionId: string,
+    data: InviteMemberRequest,
+  ): Promise<CollectionMember> {
+    return this.request<CollectionMember>(
+      `/api/v1/collections/${collectionId}/acl`,
+      { method: "POST", body: JSON.stringify(data) },
+    );
+  }
+
+  async updateCollectionMemberRole(
+    collectionId: string,
+    userId: string,
+    data: UpdateMemberRoleRequest,
+  ): Promise<CollectionMember> {
+    return this.request<CollectionMember>(
+      `/api/v1/collections/${collectionId}/acl/${userId}`,
+      { method: "PUT", body: JSON.stringify(data) },
+    );
+  }
+
+  async removeCollectionMember(
+    collectionId: string,
+    userId: string,
+  ): Promise<void> {
+    return this.request<void>(
+      `/api/v1/collections/${collectionId}/acl/${userId}`,
+      { method: "DELETE" },
+    );
+  }
+
+  async transferCollectionOwnership(
+    collectionId: string,
+    data: TransferOwnershipRequest,
+  ): Promise<TransferOwnershipResponse> {
+    return this.request<TransferOwnershipResponse>(
+      `/api/v1/collections/${collectionId}/acl/transfer`,
+      { method: "POST", body: JSON.stringify(data) },
+    );
+  }
+
+  // ===== Admin 审计日志 =====
+
+  async listAuditLogs(params: AuditLogQueryParams = {}): Promise<AuditLogListResponse> {
+    const qs = new URLSearchParams();
+    if (params.user_id) qs.set("user_id", params.user_id);
+    if (params.action) qs.set("action", params.action);
+    if (params.resource_type) qs.set("resource_type", params.resource_type);
+    if (params.resource_id) qs.set("resource_id", params.resource_id);
+    if (params.skip !== undefined) qs.set("skip", String(params.skip));
+    if (params.limit !== undefined) qs.set("limit", String(params.limit));
+    const query = qs.toString();
+    return this.request<AuditLogListResponse>(
+      `/api/v1/admin/audit-logs${query ? `?${query}` : ""}`,
+    );
   }
 }
 
