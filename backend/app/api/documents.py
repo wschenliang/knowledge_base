@@ -6,16 +6,19 @@ import logging
 import os
 import traceback
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi import (
+    APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, status
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.jwt import get_current_user
+from app.auth.permissions import require_collection_role
 from app.models.database import get_db
 from app.models.document import User
 from app.schemas.document import DocumentList, DocumentResponse
 from app.services.document_service import DocumentService
 from app.services.chat_service import get_rag_engine
-from app.utils.file_utils import is_supported, get_file_type, SUPPORTED_EXTENSIONS, SUPPORTED_EXTENSIONS
+from app.utils.file_utils import is_supported, get_file_type, SUPPORTED_EXTENSIONS
 
 logger = logging.getLogger(__name__)
 
@@ -25,12 +28,19 @@ document_service = DocumentService()
 
 @router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(
+    request: Request,
     collection_id: str = Form(...),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """上传文档到知识库"""
+    """上传文档到知识库（需要 editor+）"""
+    # editor 权限检查
+    request.path_params["collection_id"] = collection_id
+    await require_collection_role(
+        request, min_role="editor", db=db, current_user=current_user
+    )
+
     # 检查文件格式
     if not is_supported(file.filename):
         raise HTTPException(
@@ -112,15 +122,23 @@ async def upload_document(
 
 @router.get("", response_model=DocumentList)
 async def list_documents(
+    request: Request,
     collection_id: str = None,
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """列出文档"""
+    """列出文档（viewer+ 按 KB 过滤；admin 看全部）"""
+    # 若传了 collection_id，先做 viewer 检查
+    if collection_id:
+        request.path_params["collection_id"] = collection_id
+        await require_collection_role(
+            request, min_role="viewer", db=db, current_user=current_user
+        )
+
     documents, total = await document_service.list_documents(
-        db=db, collection_id=collection_id, skip=skip, limit=limit
+        db=db, user=current_user, collection_id=collection_id, skip=skip, limit=limit
     )
     return DocumentList(
         items=[DocumentResponse.model_validate(d) for d in documents],
@@ -146,11 +164,12 @@ async def get_document(
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_document(
+    request: Request,
     document_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """删除文档"""
+    """删除文档（需要 editor+）"""
     # 获取文档信息以获取 collection
     from sqlalchemy import select
     from app.models.document import Document, Collection
@@ -164,6 +183,12 @@ async def delete_document(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="文档不存在",
         )
+
+    # editor 权限检查（注入 path_params）
+    request.path_params["collection_id"] = document.collection_id
+    await require_collection_role(
+        request, min_role="editor", db=db, current_user=current_user
+    )
 
     # 获取 collection 的 qdrant_collection 名称
     result = await db.execute(
@@ -183,4 +208,21 @@ async def delete_document(
             logger.error(f"从 Qdrant 删除文档失败: {e}")
 
     # 从数据库删除
-    await document_service.delete_document(document_id, db)
+    deleted = await document_service.delete_document(document_id, db)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="文档不存在",
+        )
+
+    # 审计
+    from app.services.permission_service import PermissionService
+    await PermissionService().audit(
+        user_id=current_user.id,
+        action="doc.delete",
+        resource_type="document",
+        resource_id=document_id,
+        detail={"collection_id": document.collection_id},
+        db=db,
+    )
+    await db.commit()

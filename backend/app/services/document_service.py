@@ -159,26 +159,46 @@ class DocumentService:
     async def list_documents(
         self,
         db: AsyncSession,
+        user: Optional["User"] = None,
         collection_id: Optional[str] = None,
         skip: int = 0,
         limit: int = 100,
-    ) -> tuple[list[Document], int]:
-        """列出文档"""
-        query = select(func.count(Document.id))
-        list_query = select(Document).offset(skip).limit(limit).order_by(
-            Document.created_at.desc()
-        )
+    ) -> tuple[list["Document"], int]:
+        """列出文档
+
+        - 传 ``user``：过滤为该用户可访问 KB 下的文档（admin 看过全部）
+        - 传 ``collection_id``：仅返回该 KB 的文档（外层应已做权限校验）
+        """
+        from app.models.acl import CollectionACL
+
+        base_query = select(Document)
+        join_acl = False
+
+        if user and user.role != "admin":
+            # 普通用户：JOIN ACL 过滤
+            base_query = base_query.join(
+                CollectionACL,
+                CollectionACL.collection_id == Document.collection_id,
+            ).where(CollectionACL.user_id == user.id)
+            join_acl = True
 
         if collection_id:
-            query = query.where(Document.collection_id == collection_id)
-            list_query = list_query.where(Document.collection_id == collection_id)
+            base_query = base_query.where(Document.collection_id == collection_id)
 
-        total_result = await db.execute(query)
-        total = total_result.scalar()
+        # count：用 func.count("*") 避免与 select_from 形成笛卡尔积
+        count_target = base_query.subquery() if join_acl else base_query
+        total = (
+            await db.execute(
+                select(func.count()).select_from(count_target)
+            )
+        ).scalar() or 0
 
-        result = await db.execute(list_query)
-        documents = result.scalars().all()
-        return list(documents), total
+        result = await db.execute(
+            base_query.order_by(Document.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return list(result.scalars().all()), total
 
     async def get_document(self, document_id: str, db: AsyncSession) -> Optional[Document]:
         """获取文档详情"""
