@@ -14,7 +14,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models.document import Document, Collection
+from app.models.document import Document, Collection, User
 
 
 class DocumentService:
@@ -86,14 +86,30 @@ class DocumentService:
         return collection
 
     async def list_collections(
-        self, db: AsyncSession, skip: int = 0, limit: int = 100
+        self,
+        db: AsyncSession,
+        user: Optional[User] = None,
+        skip: int = 0,
+        limit: int = 100,
     ) -> tuple[list[Collection], int]:
-        """列出知识库集合"""
+        """列出知识库集合。
+
+        - 传 ``user``：admin 看全部；普通用户仅看自己有 ACL 的
+        - 不传 ``user``：旧行为，返回全部（保留向后兼容）
+        """
+        if user:
+            from app.services.permission_service import PermissionService
+
+            return await PermissionService().accessible_collections(user, db, skip, limit)
+
         total_result = await db.execute(select(func.count(Collection.id)))
-        total = total_result.scalar()
+        total = total_result.scalar() or 0
 
         result = await db.execute(
-            select(Collection).offset(skip).limit(limit).order_by(Collection.created_at.desc())
+            select(Collection)
+            .offset(skip)
+            .limit(limit)
+            .order_by(Collection.created_at.desc())
         )
         collections = result.scalars().all()
         return list(collections), total

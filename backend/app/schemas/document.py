@@ -43,7 +43,7 @@ class CollectionCreate(BaseModel):
     """创建知识库集合请求"""
     name: str
     description: Optional[str] = None
-    is_public: bool = False
+    is_public: bool = False  # 已废弃，保留以兼容旧客户端
     embedding_model: str = "bge-m3"
     chunk_size: int = 512
     chunk_overlap: int = 128
@@ -55,11 +55,12 @@ class CollectionResponse(BaseModel):
     name: str
     description: Optional[str] = None
     qdrant_collection: str
-    is_public: bool
+    is_public: bool = False  # 已废弃，保留以兼容
     owner_id: Optional[str] = None
     document_count: int
     created_at: datetime.datetime
     updated_at: datetime.datetime
+    my_role: Optional[str] = None  # 当前用户对此 KB 的角色（acl.get_role）
 
     model_config = {"from_attributes": True}
 

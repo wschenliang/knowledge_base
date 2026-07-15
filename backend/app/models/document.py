@@ -65,8 +65,9 @@ class Collection(Base):
     qdrant_collection: Mapped[str] = mapped_column(
         String(255), nullable=False, unique=True
     )
-    # is_public 字段已废弃，DB 列保留（create_all 不删列），ORM 不再加载/写入。
-    # 公开性语义由 collection_acls 表达。
+    # is_public 字段已废弃：v2 权限模型改用 collection_acls 表达公开性。
+    # DB 列保留（含 NOT NULL 约束），ORM 仍写入默认值 false 以满足约束。
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False)
     owner_id: Mapped[Optional[str]] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="SET NULL")
     )
