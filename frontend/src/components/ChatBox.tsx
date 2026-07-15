@@ -237,7 +237,7 @@ export default function ChatBox({
       {/* 消息区 */}
       {hasMessages ? (
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-3xl px-4 py-8 space-y-6">
+          <div className="mx-auto w-full max-w-3xl px-4 pt-16 pb-8 space-y-6">
             {messages.map((msg, i) => (
               <div
                 key={i}
@@ -309,11 +309,8 @@ export default function ChatBox({
         </div>
       ) : (
         /* 空状态 — 居中提示 */
-        <div className="flex-1 flex items-center justify-center px-4">
+        <div className="flex-1 flex items-center justify-center px-4 pt-12">
           <div className="w-full max-w-2xl text-center">
-            <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/30 mb-6">
-              <Bot className="h-8 w-8 text-white" strokeWidth={1.8} />
-            </div>
             <h2 className="text-3xl font-semibold text-slate-900 mb-2">
               你今天想问点什么？
             </h2>
