@@ -40,7 +40,7 @@ export default function CollectionDetailPage() {
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         {/* 面包屑导航 */}
         <nav className="mb-4 flex items-center gap-1.5 text-sm text-slate-500">
-          <Link href="/dashboard" className="flex items-center gap-1 hover:text-blue-600 transition-colors">
+          <Link href="/knowledge-bases" className="flex items-center gap-1 hover:text-blue-600 transition-colors">
             <Home className="h-3.5 w-3.5" />
             <span>知识库</span>
           </Link>
