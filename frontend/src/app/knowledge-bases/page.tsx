@@ -57,7 +57,7 @@ export default function KnowledgeBasesPage() {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         {/* 页面头部 */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-slate-900">我的知识库</h1>

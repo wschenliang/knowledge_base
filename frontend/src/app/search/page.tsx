@@ -34,7 +34,7 @@ export default function SearchPage() {
 
   return (
     <Layout>
-      <div className="mx-auto flex h-full max-w-4xl flex-col">
+      <div className="mx-auto flex h-full max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8">
         <div className="mb-4 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/20">
             <Search className="h-5 w-5 text-white" />
