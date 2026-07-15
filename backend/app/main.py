@@ -195,6 +195,7 @@ from app.api.chat import router as chat_router
 from app.api.search import router as search_router
 from app.api.acl import router as acl_router
 from app.api.admin import router as admin_router
+from app.api.dashboard import router as dashboard_router
 from app.auth.jwt import router as auth_router
 
 app.include_router(auth_router)
@@ -204,6 +205,7 @@ app.include_router(chat_router)
 app.include_router(search_router)
 app.include_router(acl_router)
 app.include_router(admin_router)
+app.include_router(dashboard_router)
 
 # 初始化 Prometheus 指标
 instrumentator.instrument(app).expose(app, endpoint="/metrics")
