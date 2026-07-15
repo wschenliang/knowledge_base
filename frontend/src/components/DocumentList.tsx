@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import type { Document } from "@/types";
-import { Upload, Trash2, CheckCircle, Loader2, AlertCircle, FileText, Clock, HardDrive } from "lucide-react";
+import { Upload, Trash2, CheckCircle, Loader2, AlertCircle, FileText, Clock, HardDrive, Eye } from "lucide-react";
+import PreviewModal from "./PreviewModal";
 
 interface Props {
   collectionId: string;
@@ -15,6 +16,8 @@ export default function DocumentList({ collectionId, disabled = false }: Props) 
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   const loadDocuments = useCallback(async () => {
     try {
@@ -58,6 +61,16 @@ export default function DocumentList({ collectionId, disabled = false }: Props) 
         setError(err instanceof Error ? err.message : "删除失败");
       }
     }
+  };
+
+  const handlePreview = (doc: Document) => {
+    setPreviewDoc(doc);
+    setIsPreviewOpen(true);
+  };
+
+  const handleClosePreview = () => {
+    setIsPreviewOpen(false);
+    setPreviewDoc(null);
   };
 
   const formatFileSize = (bytes: number) => {
@@ -200,7 +213,14 @@ export default function DocumentList({ collectionId, disabled = false }: Props) 
                       {statusInfo.label}
                     </span>
                   </div>
-                  <div className="col-span-1 flex justify-end">
+                  <div className="col-span-1 flex justify-end gap-1">
+                    <button
+                      onClick={() => handlePreview(doc)}
+                      className="rounded-lg p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-all"
+                      title="预览"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
                     {!disabled && (
                       <button
                         onClick={() => handleDelete(doc.id)}
@@ -217,6 +237,12 @@ export default function DocumentList({ collectionId, disabled = false }: Props) 
           </div>
         </div>
       )}
+
+      <PreviewModal
+        document={previewDoc}
+        isOpen={isPreviewOpen}
+        onClose={handleClosePreview}
+      />
     </div>
   );
 }
