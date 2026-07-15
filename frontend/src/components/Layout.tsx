@@ -79,8 +79,8 @@ export default function Layout({
     return <>{children}</>;
   }
 
-  // 仅聊天页显示对话历史
-  const showConversations = pathname?.startsWith("/chat") ?? false;
+  // 所有页面都显示对话历史（仅聊天页可直接对话，其他页点击历史会跳转 /chat）
+  const showConversations = true;
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-white">
@@ -103,10 +103,18 @@ export default function Layout({
           activeConversationId={activeConversationId ?? null}
           onSelect={(id) => {
             onSelectConversation?.(id);
+            // 如果当前不在聊天页，跳转过去加载历史
+            if (pathname !== "/chat") {
+              router.push("/chat");
+            }
             setSidebarOpen(false);
           }}
           onNew={() => {
             onNewConversation?.();
+            // 如果当前不在聊天页，跳转过去开启新对话
+            if (pathname !== "/chat") {
+              router.push("/chat");
+            }
             setSidebarOpen(false);
           }}
           onDelete={(id) => {

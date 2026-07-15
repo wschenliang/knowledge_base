@@ -12,7 +12,6 @@ export default function ChatPage() {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
-  const [chatKey, setChatKey] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const loadCollections = useCallback(async () => {
@@ -36,7 +35,7 @@ export default function ChatPage() {
     try {
       const detail = await api.getConversation(id);
       setActiveConvId(id);
-      setChatKey((k) => k + 1);
+      // 不使用 setChatKey 重置 ChatBox，避免在事件 dispatch 之前组件被卸载
       window.dispatchEvent(
         new CustomEvent("load-conversation", {
           detail: {
@@ -53,8 +52,8 @@ export default function ChatPage() {
 
   const handleNewConversation = useCallback(() => {
     setActiveConvId(null);
-    setChatKey((k) => k + 1);
     setRefreshKey((k) => k + 1);
+    // 不使用 setChatKey 重置 ChatBox，避免在事件 dispatch 之前组件被卸载
     window.dispatchEvent(new CustomEvent("new-conversation"));
   }, []);
 
@@ -62,7 +61,7 @@ export default function ChatPage() {
     (id: string) => {
       if (activeConvId === id) {
         setActiveConvId(null);
-        setChatKey((k) => k + 1);
+        // 不使用 setChatKey 重置 ChatBox，避免在事件 dispatch 之前组件被卸载
         window.dispatchEvent(new CustomEvent("new-conversation"));
       }
       // 删除后由 ChatSidebar 内部更新列表（通过 refreshKey 触发）
@@ -98,7 +97,6 @@ export default function ChatPage() {
         </div>
       ) : (
         <ChatBox
-          key={chatKey}
           collections={collections}
           conversationId={activeConvId}
           onConversationCreated={handleConversationCreated}
