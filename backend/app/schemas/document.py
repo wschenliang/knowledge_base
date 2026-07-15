@@ -69,3 +69,11 @@ class CollectionList(BaseModel):
     """知识库集合列表"""
     items: list[CollectionResponse]
     total: int
+
+
+class PreviewResponse(BaseModel):
+    """文档预览响应"""
+    content: str
+    format: str = "text"
+
+    model_config = {"from_attributes": True}

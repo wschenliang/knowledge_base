@@ -254,3 +254,54 @@ class DocumentService:
                 return f.read(), document
 
         return None, document
+
+    async def extract_text(self, document_id: str, db: AsyncSession) -> tuple[str, str]:
+        """提取文档纯文本内容，返回 (content, format)"""
+        from app.utils.file_utils import get_extension
+
+        document = await self.get_document(document_id, db)
+        if document is None:
+            raise ValueError("文档不存在")
+
+        file_content, doc = await self.download_file(document_id, db)
+        if file_content is None:
+            raise ValueError("文件内容不存在")
+
+        ext = get_extension(doc.filename)
+
+        try:
+            if ext == ".pdf":
+                from pypdf import PdfReader
+                import io
+                reader = PdfReader(io.BytesIO(file_content))
+                text = "\n".join(page.extract_text() or "" for page in reader.pages)
+                return text, "text"
+
+            elif ext == ".docx":
+                from docx import Document as DocxDocument
+                import io
+                docx = DocxDocument(io.BytesIO(file_content))
+                text = "\n".join(p.text for p in docx.paragraphs if p.text)
+                return text, "text"
+
+            elif ext in (".md", ".txt", ".csv", ".json", ".xml", ".yaml", ".yml"):
+                return file_content.decode("utf-8", errors="replace"), "text"
+
+            elif ext in (".html", ".htm"):
+                from html.parser import HTMLParser
+                class TextExtractor(HTMLParser):
+                    def __init__(self):
+                        super().__init__()
+                        self.texts = []
+                    def handle_data(self, data):
+                        self.texts.append(data)
+                parser = TextExtractor()
+                parser.feed(file_content.decode("utf-8", errors="replace"))
+                return "".join(parser.texts), "text"
+
+            else:
+                return "暂不支持该格式预览", "text"
+
+        except Exception as e:
+            logger.error(f"文本提取失败: {e}")
+            return f"预览加载失败: {str(e)}", "text"

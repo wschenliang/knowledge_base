@@ -15,7 +15,7 @@ from app.auth.jwt import get_current_user
 from app.auth.permissions import require_collection_role
 from app.models.database import get_db
 from app.models.document import User
-from app.schemas.document import DocumentList, DocumentResponse
+from app.schemas.document import DocumentList, DocumentResponse, PreviewResponse
 from app.services.document_service import DocumentService
 from app.services.chat_service import get_rag_engine
 from app.utils.file_utils import is_supported, get_file_type, SUPPORTED_EXTENSIONS
@@ -205,6 +205,50 @@ async def download_document(
             "Content-Disposition": f'inline; filename="{doc.filename}"'
         },
     )
+
+
+@router.get("/{document_id}/preview", response_model=PreviewResponse)
+async def preview_document(
+    request: Request,
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """获取文档纯文本预览（viewer+）"""
+    from sqlalchemy import select
+    from app.models.document import Document, Collection
+
+    # 获取文档信息
+    result = await db.execute(
+        select(Document).where(Document.id == document_id)
+    )
+    document = result.scalar_one_or_none()
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="文档不存在",
+        )
+
+    # 权限检查
+    request.path_params["collection_id"] = document.collection_id
+    await require_collection_role(
+        request, min_role="viewer", db=db, current_user=current_user
+    )
+
+    try:
+        content, fmt = await document_service.extract_text(document_id, db)
+        return PreviewResponse(content=content, format=fmt)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"预览提取失败: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="预览加载失败",
+        )
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
