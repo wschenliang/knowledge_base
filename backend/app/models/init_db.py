@@ -3,6 +3,7 @@
 
 from app.models.database import engine
 from app.models.document import Base, Document, Collection, User, Conversation, Message
+from app.models.acl import CollectionACL, AuditLog  # noqa: F401  注册到 Base.metadata
 
 
 async def create_tables():
