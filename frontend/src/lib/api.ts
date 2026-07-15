@@ -10,6 +10,10 @@ import type {
   SearchResponse,
   SearchRequest,
   User,
+  StreamEvent,
+  ConversationListResponse,
+  ConversationDetail,
+  ConversationItem,
 } from "@/types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -164,6 +168,93 @@ class ApiClient {
     return this.request<SearchResponse>("/api/v1/search", {
       method: "POST",
       body: JSON.stringify(request),
+    });
+  }
+
+  // 流式问答 (SSE)
+  async chatStream(
+    request: ChatRequest,
+    onEvent: (event: StreamEvent) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (this.token) {
+      headers["Authorization"] = `Bearer ${this.token}`;
+    }
+
+    const response = await fetch(`${BASE_URL}/api/v1/chat/stream`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(request),
+      signal,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("无法读取响应流");
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // 按双换行分割 SSE 事件
+      const parts = buffer.split("\n\n");
+      // 最后一个可能不完整，保留到下一次
+      buffer = parts.pop() || "";
+
+      for (const part of parts) {
+        const trimmed = part.trim();
+        if (!trimmed.startsWith("data: ")) continue;
+        const jsonStr = trimmed.slice(6);
+        try {
+          const event = JSON.parse(jsonStr) as StreamEvent;
+          onEvent(event);
+        } catch {
+          // 忽略无法解析的事件
+        }
+      }
+    }
+
+    // 处理剩余 buffer
+    if (buffer.trim().startsWith("data: ")) {
+      try {
+        const event = JSON.parse(buffer.trim().slice(6)) as StreamEvent;
+        onEvent(event);
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  // 对话历史
+  async listConversations(collectionId?: string): Promise<ConversationListResponse> {
+    const params = collectionId ? `?collection_id=${collectionId}` : "";
+    return this.request<ConversationListResponse>(`/api/v1/chat/conversations${params}`);
+  }
+
+  async getConversation(id: string): Promise<ConversationDetail> {
+    return this.request<ConversationDetail>(`/api/v1/chat/conversations/${id}`);
+  }
+
+  async deleteConversation(id: string): Promise<void> {
+    return this.request<void>(`/api/v1/chat/conversations/${id}`, { method: "DELETE" });
+  }
+
+  async renameConversation(id: string, title: string): Promise<ConversationItem> {
+    return this.request<ConversationItem>(`/api/v1/chat/conversations/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ title }),
     });
   }
 }

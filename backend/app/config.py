@@ -35,8 +35,8 @@ class Settings(BaseSettings):
 
     # MinIO 对象存储
     MINIO_ENDPOINT: str = "localhost:9000"
-    MINIO_ACCESS_KEY: str = "kbadmin"
-    MINIO_SECRET_KEY: str = "kbadmin123"
+    MINIO_ACCESS_KEY: str = "minioadmin"
+    MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_BUCKET: str = "knowledge-base"
     MINIO_USE_SSL: bool = False
 

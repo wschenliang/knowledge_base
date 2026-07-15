@@ -98,3 +98,29 @@ export interface SearchResponse {
   results: SearchResult[];
   total: number;
 }
+
+// SSE 流式事件
+export type StreamEvent =
+  | { type: "sources"; sources: SourceItem[] }
+  | { type: "token"; content: string }
+  | { type: "done"; answer: string; sources: SourceItem[]; conversation_id: string }
+  | { type: "error"; content: string };
+
+// 对话历史
+export interface ConversationItem {
+  id: string;
+  collection_id: string;
+  title: string;
+  message_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConversationListResponse {
+  items: ConversationItem[];
+  total: number;
+}
+
+export interface ConversationDetail extends ConversationItem {
+  messages: ChatMessage[];
+}

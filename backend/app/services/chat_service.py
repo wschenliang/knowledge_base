@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
+from typing import AsyncGenerator, Optional
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -166,6 +166,126 @@ class ChatService:
             "conversation_id": conversation.id,
         }
 
+    async def chat_stream(
+        self,
+        query: str,
+        collection_id: str,
+        conversation_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        top_k: int = 5,
+        use_reranker: bool = True,
+        db: Optional[AsyncSession] = None,
+    ) -> AsyncGenerator[str, None]:
+        """流式问答 — 产出 SSE 格式的字符串
+
+        SSE 事件格式:
+            data: {"type": "sources", "sources": [...]}
+            data: {"type": "token", "content": "..."}
+            data: {"type": "done", "answer": "...", "sources": [...], "conversation_id": "..."}
+            data: {"type": "error", "content": "..."}
+
+        注意：StreamingResponse 下依赖的 commit() 在客户端断开/CancelledError 时不会执行，
+        因此必须在 yield 之前显式提交，确保对话和用户消息落库。
+        """
+        if not db:
+            raise ValueError("需要数据库会话才能持久化对话")
+
+        # ========== 阶段 1：创建对话、保存用户消息、立即提交 ==========
+        # 在任何 yield 之前 commit，确保即使客户端断开/点击停止，对话也已落库
+        collection = await self._get_collection(collection_id, db)
+        conversation = await self._get_or_create_conversation(
+            conversation_id, collection_id, user_id, db
+        )
+
+        # 获取对话历史
+        chat_history = await self._get_chat_history(conversation.id, db)
+
+        # 保存用户消息
+        await self._save_message(conversation.id, "user", query, db=db)
+
+        # ★ 关键修复：在 yield 前显式 commit，让会话立即可见
+        await db.commit()
+
+        # ========== 阶段 2：执行检索 ==========
+        retrieved_docs = await self.rag_engine.search(
+            query=query,
+            collection_name=collection.qdrant_collection,
+            top_k=top_k,
+            use_reranker=use_reranker,
+        )
+
+        # ========== 阶段 3：流式合成 ==========
+        full_answer = ""
+        sources = []
+        try:
+            async for event in self.rag_engine.synthesizer.synthesize_stream(
+                query=query,
+                retrieved_docs=retrieved_docs,
+                chat_history=chat_history,
+            ):
+                event_type = event["type"]
+
+                if event_type == "sources":
+                    sources = event.get("sources", [])
+                    yield self._sse_event({"type": "sources", "sources": sources})
+
+                elif event_type == "token":
+                    yield self._sse_event(
+                        {"type": "token", "content": event["content"]}
+                    )
+
+                elif event_type == "error":
+                    yield self._sse_event(
+                        {"type": "error", "content": event["content"]}
+                    )
+                    return
+
+                elif event_type == "done":
+                    full_answer = event.get("answer", "")
+                    sources = event.get("sources", sources)
+        except Exception as e:
+            logger.exception(f"流式生成失败: {e}")
+            yield self._sse_event(
+                {"type": "error", "content": f"生成失败: {str(e)}"}
+            )
+            return
+
+        # ========== 阶段 4：保存助手回复、更新对话元数据、提交 ==========
+        try:
+            await self._save_message(
+                conversation.id,
+                "assistant",
+                full_answer,
+                sources=sources,
+                db=db,
+            )
+            # commit 后 conversation 已 detached，需重新 add 才能更新属性
+            db.add(conversation)
+            conversation.message_count += 2
+            if conversation.title == "新对话":
+                conversation.title = query[:100]
+            await db.commit()
+        except Exception as e:
+            logger.exception(f"保存助手消息失败: {e}")
+            try:
+                await db.rollback()
+            except Exception:
+                pass
+
+        yield self._sse_event(
+            {
+                "type": "done",
+                "answer": full_answer,
+                "sources": sources,
+                "conversation_id": conversation.id,
+            }
+        )
+
+    @staticmethod
+    def _sse_event(data: dict) -> str:
+        """将字典序列化为 SSE data 行"""
+        return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
     async def search(
         self,
         query: str,
@@ -199,3 +319,90 @@ class ChatService:
             ],
             "total": len(results),
         }
+
+    # ===== 对话历史 CRUD =====
+
+    async def list_conversations(
+        self,
+        user_id: str,
+        collection_id: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 50,
+        db: Optional[AsyncSession] = None,
+    ) -> tuple[list[Conversation], int]:
+        """获取用户的对话列表"""
+        query = select(Conversation).where(Conversation.user_id == user_id)
+        count_query = select(func.count()).select_from(Conversation).where(
+            Conversation.user_id == user_id
+        )
+
+        if collection_id:
+            query = query.where(Conversation.collection_id == collection_id)
+            count_query = count_query.where(
+                Conversation.collection_id == collection_id
+            )
+
+        query = query.order_by(Conversation.updated_at.desc()).offset(skip).limit(limit)
+
+        result = await db.execute(query)
+        conversations = list(result.scalars().all())
+
+        total_result = await db.execute(count_query)
+        total = total_result.scalar() or 0
+
+        return conversations, total
+
+    async def get_conversation(
+        self,
+        conversation_id: str,
+        user_id: str,
+        db: Optional[AsyncSession] = None,
+    ) -> Optional[Conversation]:
+        """获取单个对话（验证归属）"""
+        result = await db.execute(
+            select(Conversation).where(
+                Conversation.id == conversation_id,
+                Conversation.user_id == user_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_conversation_messages(
+        self,
+        conversation_id: str,
+        db: Optional[AsyncSession] = None,
+    ) -> list[Message]:
+        """获取对话的消息列表"""
+        result = await db.execute(
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.created_at.asc())
+        )
+        return list(result.scalars().all())
+
+    async def delete_conversation(
+        self,
+        conversation_id: str,
+        user_id: str,
+        db: Optional[AsyncSession] = None,
+    ) -> bool:
+        """删除对话及其消息"""
+        conv = await self.get_conversation(conversation_id, user_id, db)
+        if not conv:
+            return False
+        await db.delete(conv)
+        return True
+
+    async def rename_conversation(
+        self,
+        conversation_id: str,
+        user_id: str,
+        title: str,
+        db: Optional[AsyncSession] = None,
+    ) -> Optional[Conversation]:
+        """重命名对话"""
+        conv = await self.get_conversation(conversation_id, user_id, db)
+        if not conv:
+            return None
+        conv.title = title
+        return conv

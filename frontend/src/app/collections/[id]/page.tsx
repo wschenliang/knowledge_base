@@ -7,6 +7,8 @@ import { useAuth } from "@/lib/auth-context";
 import Layout from "@/components/Layout";
 import DocumentList from "@/components/DocumentList";
 import type { Collection } from "@/types";
+import { ChevronRight, FileText, Calendar, Database, Home } from "lucide-react";
+import Link from "next/link";
 
 export default function CollectionDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -29,29 +31,81 @@ export default function CollectionDetailPage() {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-4xl">
+      <div className="mx-auto max-w-5xl">
+        {/* 面包屑导航 */}
+        <nav className="mb-4 flex items-center gap-1.5 text-sm text-slate-500">
+          <Link href="/dashboard" className="flex items-center gap-1 hover:text-blue-600 transition-colors">
+            <Home className="h-3.5 w-3.5" />
+            <span>知识库</span>
+          </Link>
+          <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
+          <span className="text-slate-900 font-medium truncate">
+            {loading ? "加载中..." : collection?.name}
+          </span>
+        </nav>
+
         {/* 头部 */}
         {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="h-8 w-8 animate-spin rounded-full border-3 border-blue-600 border-t-transparent" />
+          <div className="flex flex-col items-center justify-center py-16">
+            <div className="relative mb-3">
+              <div className="h-10 w-10 rounded-full border-4 border-slate-200" />
+              <div className="absolute inset-0 h-10 w-10 animate-spin rounded-full border-4 border-transparent border-t-blue-600" />
+            </div>
+            <p className="text-sm text-slate-500">加载知识库...</p>
           </div>
         ) : error ? (
-          <div className="rounded-md bg-red-50 p-4 text-sm text-red-600">{error}</div>
+          <div className="rounded-xl bg-red-50 border border-red-100 p-4 text-sm text-red-600 flex items-start gap-2">
+            <div className="mt-1.5 h-1.5 w-1.5 rounded-full bg-red-500 shrink-0" />
+            {error}
+          </div>
         ) : collection ? (
           <>
-            <div className="mb-6">
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold text-gray-900">{collection.name}</h1>
-                <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700">
-                  {collection.document_count} 个文档
-                </span>
+            {/* 知识库信息卡片 */}
+            <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/20 shrink-0">
+                  <Database className="h-6 w-6 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h1 className="text-xl font-bold text-slate-900">{collection.name}</h1>
+                  {collection.description && (
+                    <p className="mt-1 text-sm text-slate-500 leading-relaxed">{collection.description}</p>
+                  )}
+                </div>
               </div>
-              {collection.description && (
-                <p className="mt-1 text-sm text-gray-500">{collection.description}</p>
-              )}
-              <p className="mt-1 text-xs text-gray-400">
-                创建于 {new Date(collection.created_at).toLocaleString("zh-CN")}
-              </p>
+
+              {/* 统计信息 */}
+              <div className="mt-5 grid grid-cols-3 gap-4 pt-5 border-t border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50">
+                    <FileText className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold text-slate-900">{collection.document_count}</p>
+                    <p className="text-xs text-slate-500">文档</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50">
+                    <Calendar className="h-4 w-4 text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">
+                      {new Date(collection.created_at).toLocaleDateString("zh-CN")}
+                    </p>
+                    <p className="text-xs text-slate-500">创建时间</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-50">
+                    <Database className="h-4 w-4 text-violet-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-900 truncate">{collection.id.slice(0, 8)}</p>
+                    <p className="text-xs text-slate-500">ID</p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* 文档管理 */}

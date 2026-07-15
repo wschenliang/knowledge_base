@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class SourceItem(BaseModel):
@@ -44,3 +45,55 @@ class SearchResponse(BaseModel):
     query: str
     results: list[SourceItem]
     total: int
+
+
+# ===== 对话历史 =====
+
+class MessageResponse(BaseModel):
+    """消息响应"""
+    id: str
+    role: str
+    content: str
+    sources: Optional[list[SourceItem]] = None
+    created_at: datetime.datetime
+
+    model_config = {"from_attributes": True}
+
+    @field_validator("sources", mode="before")
+    @classmethod
+    def parse_sources(cls, v):
+        if isinstance(v, str):
+            import json
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                return None
+        return v
+
+
+class ConversationResponse(BaseModel):
+    """对话响应"""
+    id: str
+    collection_id: str
+    title: str
+    message_count: int
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ConversationDetail(ConversationResponse):
+    """对话详情（含消息列表）"""
+    messages: list[MessageResponse] = []
+
+
+class ConversationList(BaseModel):
+    """对话列表"""
+    items: list[ConversationResponse]
+    total: int
+
+
+class RenameConversationRequest(BaseModel):
+    """重命名对话请求"""
+    title: str

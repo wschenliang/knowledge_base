@@ -2,43 +2,68 @@
 
 import type { Collection } from "@/types";
 import Link from "next/link";
+import { FileText, Calendar, ArrowRight } from "lucide-react";
+
+// 根据 id 生成稳定的渐变色
+const gradients = [
+  "from-blue-500 to-indigo-600",
+  "from-emerald-500 to-teal-600",
+  "from-violet-500 to-purple-600",
+  "from-amber-500 to-orange-600",
+  "from-rose-500 to-pink-600",
+  "from-cyan-500 to-blue-600",
+  "from-fuchsia-500 to-violet-600",
+  "from-lime-500 to-green-600",
+];
+
+function getGradient(id: string) {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = id.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return gradients[Math.abs(hash) % gradients.length];
+}
 
 interface Props {
   collection: Collection;
 }
 
 export default function CollectionCard({ collection }: Props) {
+  const gradient = getGradient(collection.id);
+
   return (
     <Link
       href={`/collections/${collection.id}`}
-      className="block rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-blue-300 hover:shadow-md"
+      className="group block rounded-2xl border border-slate-200 bg-white shadow-sm card-hover overflow-hidden"
     >
-      <div className="flex items-start justify-between">
-        <div className="flex-1 min-w-0">
-          <h3 className="text-lg font-semibold text-gray-900 truncate">
-            {collection.name}
-          </h3>
-          {collection.description && (
-            <p className="mt-1 text-sm text-gray-500 line-clamp-2">
-              {collection.description}
-            </p>
-          )}
-        </div>
-      </div>
+      {/* 顶部彩色条带 */}
+      <div className={`h-1.5 bg-gradient-to-r ${gradient}`} />
 
-      <div className="mt-4 flex items-center gap-4 text-sm text-gray-500">
-        <span className="flex items-center gap-1">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          {collection.document_count} 个文档
-        </span>
-        <span className="flex items-center gap-1">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          {new Date(collection.created_at).toLocaleDateString("zh-CN")}
-        </span>
+      <div className="p-5">
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-base font-semibold text-slate-900 truncate group-hover:text-blue-700 transition-colors">
+              {collection.name}
+            </h3>
+            {collection.description && (
+              <p className="mt-1 text-sm text-slate-500 line-clamp-2 leading-relaxed">
+                {collection.description}
+              </p>
+            )}
+          </div>
+          <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
+        </div>
+
+        <div className="flex items-center gap-4 text-xs text-slate-500 pt-3 border-t border-slate-100">
+          <span className="flex items-center gap-1.5">
+            <FileText className="h-3.5 w-3.5 text-slate-400" />
+            <span className="font-medium">{collection.document_count}</span> 个文档
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Calendar className="h-3.5 w-3.5 text-slate-400" />
+            {new Date(collection.created_at).toLocaleDateString("zh-CN")}
+          </span>
+        </div>
       </div>
     </Link>
   );

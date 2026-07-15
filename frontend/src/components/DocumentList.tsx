@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import type { Document } from "@/types";
+import { Upload, Trash2, CheckCircle, Loader2, AlertCircle, FileText, Clock, HardDrive } from "lucide-react";
 
 interface Props {
   collectionId: string;
@@ -63,10 +64,23 @@ export default function DocumentList({ collectionId }: Props) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const getStatusInfo = (status: string) => {
+    switch (status) {
+      case "completed":
+        return { icon: CheckCircle, label: "已完成", className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+      case "processing":
+        return { icon: Loader2, label: "处理中", className: "bg-amber-50 text-amber-700 border-amber-200" };
+      case "error":
+        return { icon: AlertCircle, label: "失败", className: "bg-red-50 text-red-700 border-red-200" };
+      default:
+        return { icon: Clock, label: status, className: "bg-slate-50 text-slate-600 border-slate-200" };
+    }
+  };
+
   return (
     <div>
       {/* 上传区域 */}
-      <div className="mb-6 rounded-lg border-2 border-dashed border-gray-300 p-6 text-center hover:border-blue-400">
+      <div className="mb-6 rounded-2xl border-2 border-dashed border-slate-200 bg-white p-8 text-center hover:border-blue-400 hover:bg-blue-50/30 transition-all duration-200 group">
         <label className="cursor-pointer">
           <input
             type="file"
@@ -75,78 +89,112 @@ export default function DocumentList({ collectionId }: Props) {
             onChange={handleUpload}
             disabled={uploading}
           />
-          <div className="flex flex-col items-center gap-2">
-            <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-            </svg>
-            <span className="text-sm text-gray-600">
-              {uploading ? "上传中..." : "点击上传文档 (TXT, PDF, DOCX, MD, HTML)"}
-            </span>
+          <div className="flex flex-col items-center gap-3">
+            <div className={`flex h-14 w-14 items-center justify-center rounded-2xl transition-all duration-200 ${
+              uploading
+                ? "bg-blue-100"
+                : "bg-slate-100 group-hover:bg-blue-100"
+            }`}>
+              <Upload className={`h-6 w-6 transition-colors ${
+                uploading ? "text-blue-600 animate-bounce" : "text-slate-400 group-hover:text-blue-600"
+              }`} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-700">
+                {uploading ? "正在上传..." : "点击上传文档"}
+              </p>
+              <p className="mt-0.5 text-xs text-slate-400">
+                支持 TXT, PDF, DOCX, MD, HTML 格式
+              </p>
+            </div>
           </div>
         </label>
       </div>
 
       {error && (
-        <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-600">
+        <div className="mb-4 rounded-xl bg-red-50 border border-red-100 p-3.5 text-sm text-red-600 flex items-start gap-2">
+          <div className="mt-1.5 h-1.5 w-1.5 rounded-full bg-red-500 shrink-0" />
           {error}
         </div>
       )}
 
       {/* 文档列表 */}
       {loading ? (
-        <div className="flex justify-center py-8">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+        <div className="flex flex-col items-center justify-center py-12">
+          <div className="relative mb-3">
+            <div className="h-8 w-8 rounded-full border-4 border-slate-200" />
+            <div className="absolute inset-0 h-8 w-8 animate-spin rounded-full border-4 border-transparent border-t-blue-600" />
+          </div>
+          <p className="text-sm text-slate-500">加载文档...</p>
         </div>
       ) : documents.length === 0 ? (
-        <div className="rounded-lg border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
-          暂无文档，请上传
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white py-12">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 mb-3">
+            <FileText className="h-6 w-6 text-slate-400" />
+          </div>
+          <p className="text-sm font-medium text-slate-700">暂无文档</p>
+          <p className="mt-1 text-xs text-slate-400">上传文档以开始构建知识库</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {documents.map((doc) => (
-            <div
-              key={doc.id}
-              className="flex items-center gap-4 rounded-lg border border-gray-200 bg-white px-4 py-3"
-            >
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  {doc.filename}
-                </p>
-                <p className="text-xs text-gray-500">
-                  {formatFileSize(doc.file_size)} · {doc.chunk_count} 个分块 ·{" "}
-                  {new Date(doc.created_at).toLocaleString("zh-CN")}
-                </p>
-              </div>
-              <span
-                className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                  doc.status === "completed"
-                    ? "bg-green-100 text-green-700"
-                    : doc.status === "processing"
-                    ? "bg-yellow-100 text-yellow-700"
-                    : doc.status === "error"
-                    ? "bg-red-100 text-red-700"
-                    : "bg-gray-100 text-gray-700"
-                }`}
-              >
-                {doc.status === "completed"
-                  ? "已完成"
-                  : doc.status === "processing"
-                  ? "处理中"
-                  : doc.status === "error"
-                  ? "失败"
-                  : doc.status}
-              </span>
-              <button
-                onClick={() => handleDelete(doc.id)}
-                className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-500"
-                title="删除"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </button>
-            </div>
-          ))}
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          {/* 表头 */}
+          <div className="grid grid-cols-12 gap-4 border-b border-slate-100 bg-slate-50/80 px-5 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+            <div className="col-span-5">文件名</div>
+            <div className="col-span-2">大小</div>
+            <div className="col-span-2">分块</div>
+            <div className="col-span-2">状态</div>
+            <div className="col-span-1 text-right">操作</div>
+          </div>
+
+          {/* 文档行 */}
+          <div className="divide-y divide-slate-100">
+            {documents.map((doc) => {
+              const statusInfo = getStatusInfo(doc.status);
+              const StatusIcon = statusInfo.icon;
+              return (
+                <div
+                  key={doc.id}
+                  className="grid grid-cols-12 gap-4 items-center px-5 py-3.5 hover:bg-slate-50/50 transition-colors group"
+                >
+                  <div className="col-span-5 flex items-center gap-3 min-w-0">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 shrink-0">
+                      <FileText className="h-4 w-4 text-blue-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-900 truncate">{doc.filename}</p>
+                      <p className="text-xs text-slate-400">
+                        {new Date(doc.created_at).toLocaleString("zh-CN")}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
+                      <HardDrive className="h-3 w-3 text-slate-400" />
+                      {formatFileSize(doc.file_size)}
+                    </span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-xs text-slate-500">{doc.chunk_count} 个分块</span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium ${statusInfo.className}`}>
+                      <StatusIcon className={`h-3 w-3 ${status === "processing" ? "animate-spin" : ""}`} />
+                      {statusInfo.label}
+                    </span>
+                  </div>
+                  <div className="col-span-1 flex justify-end">
+                    <button
+                      onClick={() => handleDelete(doc.id)}
+                      className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                      title="删除"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

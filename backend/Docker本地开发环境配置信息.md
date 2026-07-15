@@ -7,7 +7,69 @@
 
 ---
 
-### 1. MySQL 8.4
+### 1. Qdrant v1.13.6（向量数据库）
+
+| 项目 | 值 |
+|------|-----|
+| 容器名 | `qdrant` |
+| 镜像 | `qdrant/qdrant:v1.13.6` |
+| HTTP 端口 | `6333` |
+| gRPC 端口 | `6334` |
+| 连接地址 | `localhost:6333` |
+| gRPC 地址 | `localhost:6334` |
+| Web UI | http://localhost:6333/dashboard |
+| 认证 | 无（开发环境） |
+| 数据目录 | `C:\Users\cleve\docker-data\qdrant\storage` |
+| 重启策略 | `unless-stopped` |
+
+**快速连接：**
+```bash
+# 查看服务状态
+curl http://localhost:6333/healthz
+
+# 查看集群信息
+curl http://localhost:6333/cluster
+```
+
+**Python 连接示例：**
+```python
+from qdrant_client import QdrantClient
+
+client = QdrantClient(url="http://localhost:6333")
+```
+
+---
+
+### 2. PostgreSQL 16（关系数据库）
+
+| 项目 | 值 |
+|------|-----|
+| 容器名 | `postgres` |
+| 镜像 | `postgres:16-alpine` |
+| 用户名 | `kbuser` |
+| 密码 | `kbpass` |
+| 默认数据库 | `knowledge_base` |
+| 端口 | `5432` |
+| 连接地址 | `localhost:5432` |
+| JDBC URL | `jdbc:postgresql://localhost:5432/knowledge_base` |
+| 数据目录 | `C:\Users\cleve\docker-data\postgres` |
+| 重启策略 | `unless-stopped` |
+
+**快速连接：**
+```bash
+docker exec -it postgres psql -U kbuser -d knowledge_base
+```
+
+**SQLAlchemy 连接示例：**
+```python
+from sqlalchemy import create_engine
+
+engine = create_engine("postgresql+asyncpg://kbuser:kbpass@localhost:5432/knowledge_base")
+```
+
+---
+
+### 3. MySQL 8.4
 
 | 项目 | 值 |
 |------|-----|
@@ -31,7 +93,7 @@ docker exec -it mysql mysql -uroot -proot123456
 
 ---
 
-### 2. Redis 7.4
+### 4. Redis 7.4
 
 | 项目 | 值 |
 |------|-----|
@@ -61,7 +123,7 @@ spring:
 
 ---
 
-### 3. Prometheus (latest)
+### 5. Prometheus (latest)
 
 | 项目 | 值 |
 |------|-----|
@@ -80,7 +142,7 @@ spring:
 
 ---
 
-### 4. Milvus v2.4.17（向量数据库）
+### 6. Milvus v2.4.17（向量数据库）
 
 | 项目 | 值 |
 |------|-----|
@@ -106,7 +168,7 @@ spring:
 
 ---
 
-### 5. MinIO (latest)
+### 7. MinIO (latest)
 
 | 项目 | 值 |
 |------|-----|
@@ -125,7 +187,7 @@ spring:
 
 ---
 
-### 6. RabbitMQ 3.13（含 Management 插件）
+### 8. RabbitMQ 3.13（含 Management 插件）
 
 | 项目 | 值 |
 |------|-----|
@@ -154,7 +216,7 @@ spring:
 
 ---
 
-### 7. Elasticsearch 8.15.4
+### 9. Elasticsearch 8.15.4
 
 | 项目 | 值 |
 |------|-----|
@@ -176,7 +238,7 @@ curl http://localhost:9200/_cluster/health?pretty
 
 ---
 
-### 8. Kibana 8.15.4
+### 10. Kibana 8.15.4
 
 | 项目 | 值 |
 |------|-----|
@@ -193,7 +255,7 @@ curl http://localhost:9200/_cluster/health?pretty
 
 ---
 
-### 9. Grafana (latest)
+### 11. Grafana (latest)
 
 | 项目 | 值 |
 |------|-----|
@@ -226,12 +288,12 @@ docker ps --filter "network=devtools"
 
 **启动全部服务：**
 ```bash
-docker start etcd minio mysql redis prometheus grafana rabbitmq elasticsearch kibana milvus
+docker start etcd minio mysql redis postgres qdrant prometheus grafana rabbitmq elasticsearch kibana milvus
 ```
 
 **停止全部服务：**
 ```bash
-docker stop milvus kibana elasticsearch rabbitmq grafana prometheus redis mysql minio etcd
+docker stop milvus kibana elasticsearch rabbitmq grafana prometheus qdrant postgres redis mysql minio etcd
 ```
 
 > 建议启动顺序：先启动基础依赖（etcd、minio），再启动 Milvus，其他服务无依赖顺序要求。
@@ -254,6 +316,9 @@ docker exec -it <容器名> /bin/bash    # 例如: docker exec -it redis /bin/ba
 |------|------|------|----------|
 | 3000 | Grafana | HTTP | http://localhost:3000 |
 | 3306 | MySQL | TCP/JDBC | `localhost:3306` |
+| 5432 | PostgreSQL | TCP/JDBC | `localhost:5432` |
+| 6333 | Qdrant HTTP | HTTP | http://localhost:6333 |
+| 6334 | Qdrant gRPC | gRPC | `localhost:6334` |
 | 6379 | Redis | TCP | `localhost:6379` |
 | 9090 | Prometheus | HTTP | http://localhost:9090 |
 | 9091 | Milvus Metrics | HTTP | http://localhost:9091 |
