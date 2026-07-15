@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.jwt import get_current_user
+from app.auth.permissions import require_collection_role
 from app.models.database import get_db
 from app.models.document import User
 from app.schemas.chat import (
@@ -30,11 +31,18 @@ chat_service = ChatService()
 
 @router.post("", response_model=ChatResponse)
 async def chat(
+    req: Request,
     request: ChatRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """基于知识库进行问答"""
+    """基于知识库进行问答（需要 viewer+）"""
+    # viewer 权限检查
+    req.path_params["collection_id"] = request.collection_id
+    await require_collection_role(
+        req, min_role="viewer", db=db, current_user=current_user
+    )
+
     try:
         result = await chat_service.chat(
             query=request.query,
@@ -66,11 +74,17 @@ async def chat(
 
 @router.post("/stream")
 async def chat_stream(
+    req: Request,
     request: ChatRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """基于知识库进行流式问答（SSE）"""
+    """基于知识库进行流式问答 SSE（需要 viewer+）"""
+    # viewer 权限检查（提前检查避免启动 stream 后才发现无权限）
+    req.path_params["collection_id"] = request.collection_id
+    await require_collection_role(
+        req, min_role="viewer", db=db, current_user=current_user
+    )
 
     async def event_generator():
         try:

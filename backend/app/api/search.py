@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.jwt import get_current_user
+from app.auth.permissions import require_collection_role
 from app.models.database import get_db
 from app.models.document import User
 from app.schemas.chat import SearchRequest, SearchResponse
@@ -17,11 +18,18 @@ chat_service = ChatService()
 
 @router.post("", response_model=SearchResponse)
 async def search(
+    req: Request,
     request: SearchRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """语义搜索知识库"""
+    """语义搜索知识库（需要 viewer+）"""
+    # viewer 权限检查
+    req.path_params["collection_id"] = request.collection_id
+    await require_collection_role(
+        req, min_role="viewer", db=db, current_user=current_user
+    )
+
     try:
         result = await chat_service.search(
             query=request.query,
