@@ -95,6 +95,19 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"数据库表初始化失败 (可能在 docker 中首次启动): {e}")
 
+    # v2 ACL 迁移：为现有 KB 自动创建 owner ACL（幂等）
+    try:
+        from app.models.database import async_session
+        from app.scripts.migrate_v2_acl import migrate_v2_acl
+
+        async with async_session() as db:
+            result = await migrate_v2_acl(db)
+            logger.info(
+                f"v2 ACL 迁移完成: migrated={result['migrated']}, orphans={result['orphans']}"
+            )
+    except Exception as e:
+        logger.warning(f"v2 ACL 迁移失败: {e}")
+
     # 初始化 Prometheus 指标
     logger.info("Prometheus 指标已启用: /metrics")
 
