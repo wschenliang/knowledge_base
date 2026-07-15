@@ -7,7 +7,7 @@ import os
 import traceback
 
 from fastapi import (
-    APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, status
+    APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, status, Response
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -160,6 +160,51 @@ async def get_document(
             detail="文档不存在",
         )
     return DocumentResponse.model_validate(document)
+
+
+@router.get("/{document_id}/download")
+async def download_document(
+    request: Request,
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """下载文档文件（viewer+）"""
+    from sqlalchemy import select
+    from app.models.document import Document, Collection
+
+    # 获取文档信息
+    result = await db.execute(
+        select(Document).where(Document.id == document_id)
+    )
+    document = result.scalar_one_or_none()
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="文档不存在",
+        )
+
+    # 权限检查
+    request.path_params["collection_id"] = document.collection_id
+    await require_collection_role(
+        request, min_role="viewer", db=db, current_user=current_user
+    )
+
+    # 读取文件内容
+    file_content, doc = await document_service.download_file(document_id, db)
+    if file_content is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="文件内容不存在",
+        )
+
+    return Response(
+        content=file_content,
+        media_type=doc.file_type or "application/octet-stream",
+        headers={
+            "Content-Disposition": f'inline; filename="{doc.filename}"'
+        },
+    )
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)

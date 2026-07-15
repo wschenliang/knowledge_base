@@ -228,3 +228,29 @@ class DocumentService:
 
         await db.delete(document)
         return True
+
+    async def download_file(self, document_id: str, db: AsyncSession) -> tuple[Optional[bytes], Optional[Document]]:
+        """下载文件内容"""
+        document = await self.get_document(document_id, db)
+        if document is None:
+            return None, None
+
+        # 从 MinIO 读取
+        if self.minio_available and self.minio_client:
+            try:
+                response = self.minio_client.get_object(
+                    bucket_name=settings.MINIO_BUCKET,
+                    object_name=document.file_path,
+                )
+                return response.read(), document
+            except Exception as e:
+                logger.warning(f"MinIO 读取失败: {e}")
+
+        # 本地文件回退
+        local_path = document.file_path.replace("local/", "")
+        local_full_path = os.path.join(settings.UPLOAD_DIR or "uploads", local_path)
+        if os.path.exists(local_full_path):
+            with open(local_full_path, "rb") as f:
+                return f.read(), document
+
+        return None, document
