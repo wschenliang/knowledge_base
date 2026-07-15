@@ -9,7 +9,7 @@ import CollectionCard from "@/components/CollectionCard";
 import type { Collection } from "@/types";
 import { Plus, Database, FileText, X, FolderOpen } from "lucide-react";
 
-export default function DashboardPage() {
+export default function KnowledgeBasesPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -60,7 +60,7 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-6xl">
         {/* 页面头部 */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">知识库</h1>
+          <h1 className="text-2xl font-bold text-slate-900">我的知识库</h1>
           <p className="mt-1 text-sm text-slate-500">管理和组织您的文档知识库</p>
         </div>
 

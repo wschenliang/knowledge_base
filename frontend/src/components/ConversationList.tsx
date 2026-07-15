@@ -12,6 +12,7 @@ import {
   Database,
   BookOpen,
   Sparkles,
+  BarChart3,
   LogOut,
   MessageSquare,
   PanelLeftClose,
@@ -29,7 +30,8 @@ interface Props {
 }
 
 const toolItems = [
-  { href: "/dashboard", label: "知识库管理", icon: BookOpen },
+  { href: "/dashboard", label: "数据概览", icon: BarChart3 },
+  { href: "/knowledge-bases", label: "我的知识库", icon: BookOpen },
   { href: "/search", label: "语义搜索", icon: Search },
   { href: "/chat", label: "智能问答", icon: Sparkles },
 ];
