@@ -101,11 +101,22 @@ class EmailService:
         html_part = MIMEText(html_content, "html", "utf-8")
         msg.attach(html_part)
 
+        # SMTP 端口语义：
+        #   465 = SMTPS（隐式 TLS）→ use_tls=True
+        #   587 = SMTP + STARTTLS → start_tls=True
+        # SMTP_TLS 配置项表达"是否启用加密"，由端口决定走哪一种 TLS。
+        _port = settings.SMTP_PORT or 0
+        _tls = bool(settings.SMTP_TLS)
+        _use_tls = _tls and _port == 465
+        _start_tls = _tls and _port != 465
+
         await aiosmtplib.send(
             msg,
             hostname=settings.SMTP_HOST,
-            port=settings.SMTP_PORT,
+            port=_port,
             username=settings.SMTP_USER,
             password=settings.SMTP_PASSWORD,
-            start_tls=settings.SMTP_TLS,
+            use_tls=_use_tls,
+            start_tls=_start_tls,
+            timeout=30,
         )
