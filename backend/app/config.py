@@ -64,5 +64,16 @@ class Settings(BaseSettings):
     QDRANT_COLLECTION_PREFIX: str = "kb_"
     EMBEDDING_DIM: int = 1024  # bge-m3 为 1024 维; nomic-embed-text 为 768 维; text-embedding-3-small 为 1536 维
 
+    # 邮件配置
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_TLS: bool = True
+
+    # 前端地址（用于邮件中的链接）
+    FRONTEND_URL: str = "http://localhost:3000"
+
 
 settings = Settings()
