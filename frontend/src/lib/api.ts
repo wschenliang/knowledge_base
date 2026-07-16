@@ -119,6 +119,69 @@ class ApiClient {
     return this.request<User>("/api/v1/auth/me");
   }
 
+  // ===== OAuth 第三方登入 =====
+
+  /** 后端可用的 OAuth Provider 列表 + 是否已配置 Client 凭据 */
+  async listOAuthProviders(): Promise<{
+    providers: Array<{ name: string; configured: boolean }>;
+  }> {
+    return this.request<{
+      providers: Array<{ name: string; configured: boolean }>;
+    }>("/api/v1/auth/oauth/providers");
+  }
+
+  /** 起 OAuth 授权跳转 URL（仅登录，未携带 bind 意图） */
+  getOAuthLoginUrl(provider: string): string {
+    return `${BASE_URL}/api/v1/auth/oauth/${provider}/login`;
+  }
+
+  /** 起绑定流程：已登录用户请求后，返回 authorize_url 让前端跳转 */
+  async startOAuthBind(
+    provider: string,
+  ): Promise<{ authorize_url: string }> {
+    return this.request<{ authorize_url: string }>(
+      "/api/v1/auth/oauth/bind",
+      {
+        method: "POST",
+        body: JSON.stringify({ provider }),
+      },
+    );
+  }
+
+  /** 当前用户已绑定的 Provider 列表 + 是否设过密码 */
+  async listOAuthBindings(): Promise<{
+    bindings: Array<{
+      provider: string;
+      provider_email?: string | null;
+      provider_display_name?: string | null;
+      avatar_url?: string | null;
+      created_at?: string | null;
+    }>;
+    password_set: boolean;
+  }> {
+    return this.request<{
+      bindings: Array<{
+        provider: string;
+        provider_email?: string | null;
+        provider_display_name?: string | null;
+        avatar_url?: string | null;
+        created_at?: string | null;
+      }>;
+      password_set: boolean;
+    }>("/api/v1/auth/oauth/bindings");
+  }
+
+  /** 解绑 Provider */
+  async unbindOAuthProvider(provider: string): Promise<{
+    message: string;
+    provider: string;
+  }> {
+    return this.request<{ message: string; provider: string }>(
+      `/api/v1/auth/oauth/bind/${provider}`,
+      { method: "DELETE" },
+    );
+  }
+
   // 知识库集合
   async listCollections(tags?: string[]): Promise<CollectionList> {
     const params = tags && tags.length > 0

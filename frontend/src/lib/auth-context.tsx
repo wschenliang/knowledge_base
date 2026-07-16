@@ -9,6 +9,8 @@ interface AuthState {
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string, displayName?: string) => Promise<void>;
+  /** OAuth 回调页使用：将后端下发的 JWT 托管到本地，并更新为已登入 */
+  loginWithToken: (token: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -45,8 +47,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const me = await api.getMe();
       setUser(me);
     },
-    []
+    [],
   );
+
+  /**
+   * 使用外部注入的 token（主要给 OAuth 回调落地页使用），
+   * 完成后入 user 并触发路由层重渲染。
+   */
+  const loginWithToken = useCallback(async (token: string) => {
+    api.setToken(token);
+    const me = await api.getMe();
+    setUser(me);
+  }, []);
 
   const logout = useCallback(() => {
     api.setToken(null);
@@ -55,7 +67,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, register, logout, isAuthenticated: !!user }}
+      value={{
+        user,
+        loading,
+        login,
+        register,
+        loginWithToken,
+        logout,
+        isAuthenticated: !!user,
+      }}
     >
       {children}
     </AuthContext.Provider>

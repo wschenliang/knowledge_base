@@ -1,11 +1,47 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
+import { api } from "@/lib/api";
 import { Database, User, Lock, UserPlus, LogIn, Sparkles, BookOpen, Search, MessageSquare } from "lucide-react";
 import LegalDialog from "@/components/LegalDialog";
 import { PRIVACY_POLICY, TERMS_OF_SERVICE, type LegalDoc } from "@/lib/legal-content";
+
+/* OAuth Provider 品牌 SVG 图标（保持独立组件，可复用） */
+function MicrosoftIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect x="1" y="1" width="10" height="10" fill="#F25022" />
+      <rect x="13" y="1" width="10" height="10" fill="#7FBA00" />
+      <rect x="1" y="13" width="10" height="10" fill="#00A4EF" />
+      <rect x="13" y="13" width="10" height="10" fill="#FFB900" />
+    </svg>
+  );
+}
+
+function GitHubIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.522 2 12 2Z"
+      />
+    </svg>
+  );
+}
 
 /** 当前激活的法律文档类型：'terms' | 'privacy' | null */
 type LegalDocKey = "terms" | "privacy";
@@ -39,6 +75,31 @@ export default function LoginForm({ mode }: LoginFormProps) {
   const [loading, setLoading] = useState(false);
   // 控制法律协议弹窗的打开状态与当前展示的文档类型
   const [legalDocKey, setLegalDocKey] = useState<LegalDocKey | null>(null);
+  // 后端已配置的 OAuth Provider 列表：仅在登录页加载，未配置则不显示 OAuth 区
+  const [oauthProviders, setOauthProviders] = useState<
+    Array<{ name: string; configured: boolean }>
+  >([]);
+
+  // 拉取后端 Provider 配置（仅在登入页有效；该端点是公开的）
+  useEffect(() => {
+    if (isRegister) return;
+    let cancelled = false;
+    api
+      .listOAuthProviders()
+      .then((res) => {
+        if (cancelled) return;
+        setOauthProviders(
+          (res.providers || []).filter((p) => p.configured),
+        );
+      })
+      .catch(() => {
+        // 低调失败：不阻塞密码登入
+        if (!cancelled) setOauthProviders([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isRegister]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -225,6 +286,39 @@ export default function LoginForm({ mode }: LoginFormProps) {
                 </>
               )}
             </button>
+
+            {/* OAuth 第三方登入（仅在登录页呈现，且需后端已配置） */}
+            {!isRegister && oauthProviders.length > 0 && (
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center gap-3">
+                  <div className="h-px flex-1 bg-slate-200" />
+                  <span className="text-xs text-slate-400">或</span>
+                  <div className="h-px flex-1 bg-slate-200" />
+                </div>
+                <div className="space-y-2">
+                  {oauthProviders.map((p) => {
+                    const icon =
+                      p.name === "microsoft" ? <MicrosoftIcon className="h-4 w-4" /> :
+                      p.name === "github" ? <GitHubIcon className="h-4 w-4 text-slate-900" /> :
+                      null;
+                    const label =
+                      p.name === "microsoft" ? "使用 Microsoft 登录" :
+                      p.name === "github" ? "使用 GitHub 登录" :
+                      `使用 ${p.name} 登录`;
+                    return (
+                      <a
+                        key={p.name}
+                        href={api.getOAuthLoginUrl(p.name)}
+                        className="w-full flex items-center justify-center gap-2.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:ring-offset-2 transition-all"
+                      >
+                        {icon}
+                        {label}
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="text-center pt-2">
               {isRegister ? (
