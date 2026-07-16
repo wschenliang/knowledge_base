@@ -18,6 +18,7 @@ from app.models.document import User
 from app.schemas.document import DocumentList, DocumentResponse, PreviewResponse
 from app.services.document_service import DocumentService
 from app.services.chat_service import get_rag_engine
+from app.services.audit_service import AuditService
 from app.utils.file_utils import is_supported, get_file_type, SUPPORTED_EXTENSIONS
 
 logger = logging.getLogger(__name__)
@@ -117,6 +118,19 @@ async def upload_document(
         await db.flush()
 
     await db.refresh(document)
+
+    # 审计日志
+    await AuditService.log(
+        db=db,
+        user_id=current_user.id,
+        action="doc.upload",
+        resource_type="document",
+        resource_id=document.id,
+        detail={"filename": file.filename, "collection_id": collection_id},
+        request=request,
+    )
+    await db.commit()
+
     return DocumentResponse.model_validate(document)
 
 
@@ -305,13 +319,13 @@ async def delete_document(
         )
 
     # 审计
-    from app.services.permission_service import PermissionService
-    await PermissionService().audit(
+    await AuditService.log(
+        db=db,
         user_id=current_user.id,
         action="doc.delete",
         resource_type="document",
         resource_id=document_id,
         detail={"collection_id": document.collection_id},
-        db=db,
+        request=request,
     )
     await db.commit()

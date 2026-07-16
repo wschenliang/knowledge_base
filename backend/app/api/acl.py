@@ -29,6 +29,7 @@ from app.schemas.acl import (
     ACLUpdateRequest,
 )
 from app.services.permission_service import PermissionService
+from app.services.audit_service import AuditService
 
 logger = logging.getLogger(__name__)
 
@@ -108,13 +109,14 @@ async def invite_member(
         )
 
     # 审计
-    await permission_service.audit(
+    await AuditService.log(
+        db=db,
         user_id=current_user.id,
         action="acl.grant",
         resource_type="collection",
         resource_id=collection_id,
         detail={"target_user": body.username, "role": body.role},
-        db=db,
+        request=request,
     )
     await db.commit()
     await db.refresh(acl)
@@ -158,7 +160,8 @@ async def update_member_role(
             detail=str(e),
         )
 
-    await permission_service.audit(
+    await AuditService.log(
+        db=db,
         user_id=current_user.id,
         action="acl.update",
         resource_type="collection",
@@ -168,7 +171,7 @@ async def update_member_role(
             "old_role": old_role,
             "new_role": body.role,
         },
-        db=db,
+        request=request,
     )
     await db.commit()
     await db.refresh(acl)
@@ -210,13 +213,14 @@ async def remove_member(
             detail="成员不存在",
         )
 
-    await permission_service.audit(
+    await AuditService.log(
+        db=db,
         user_id=current_user.id,
         action="acl.revoke",
         resource_type="collection",
         resource_id=collection_id,
         detail={"target_user_id": user_id},
-        db=db,
+        request=request,
     )
     await db.commit()
 
@@ -249,7 +253,8 @@ async def transfer_ownership(
             detail=str(e),
         )
 
-    await permission_service.audit(
+    await AuditService.log(
+        db=db,
         user_id=current_user.id,
         action="acl.transfer",
         resource_type="collection",
@@ -258,7 +263,7 @@ async def transfer_ownership(
             "old_owner": current_user.id,
             "new_owner": new_owner_id,
         },
-        db=db,
+        request=request,
     )
     await db.commit()
 

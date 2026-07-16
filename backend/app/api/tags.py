@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.jwt import get_current_user
@@ -15,6 +15,7 @@ from app.schemas.document import (
     TagListResponse,
 )
 from app.services.tag_service import TagService
+from app.services.audit_service import AuditService
 
 router = APIRouter(prefix="/api/v1/tags", tags=["标签管理"])
 tag_service = TagService()
@@ -36,6 +37,7 @@ async def list_tags(
 @router.post("", response_model=TagResponse, status_code=status.HTTP_201_CREATED)
 async def create_tag(
     request: TagCreate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -49,6 +51,18 @@ async def create_tag(
         )
         await db.commit()
         await db.refresh(tag)
+
+        # 审计日志
+        await AuditService.log(
+            db=db,
+            user_id=current_user.id,
+            action="tag.create",
+            resource_type="tag",
+            resource_id=tag.id,
+            detail={"name": tag.name},
+            request=req,
+        )
+        await db.commit()
 
         return TagResponse(
             id=tag.id,
@@ -69,6 +83,7 @@ async def create_tag(
 async def update_tag(
     tag_id: str,
     request: TagUpdate,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -105,6 +120,18 @@ async def update_tag(
                 collection_count = item["collection_count"]
                 break
 
+        # 审计日志
+        await AuditService.log(
+            db=db,
+            user_id=current_user.id,
+            action="tag.update",
+            resource_type="tag",
+            resource_id=tag_id,
+            detail={"name": updated_tag.name},
+            request=req,
+        )
+        await db.commit()
+
         return TagResponse(
             id=updated_tag.id,
             name=updated_tag.name,
@@ -123,6 +150,7 @@ async def update_tag(
 @router.delete("/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_tag(
     tag_id: str,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -142,4 +170,15 @@ async def delete_tag(
         )
 
     await tag_service.delete_tag(tag_id, db)
+
+    # 审计日志
+    await AuditService.log(
+        db=db,
+        user_id=current_user.id,
+        action="tag.delete",
+        resource_type="tag",
+        resource_id=tag_id,
+        detail={"name": tag.name},
+        request=req,
+    )
     await db.commit()

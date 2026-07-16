@@ -17,6 +17,7 @@ from app.schemas.document import (
 )
 from app.services.document_service import DocumentService
 from app.services.tag_service import TagService
+from app.services.audit_service import AuditService
 
 router = APIRouter(prefix="/api/v1/collections", tags=["知识库集合"])
 document_service = DocumentService()
@@ -25,6 +26,7 @@ tag_service = TagService()
 
 @router.post("", response_model=CollectionResponse, status_code=status.HTTP_201_CREATED)
 async def create_collection(
+    req: Request,
     request: CollectionCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -51,6 +53,18 @@ async def create_collection(
     db.add(owner_acl)
     await db.commit()
     await db.refresh(collection)
+
+    # 审计日志
+    await AuditService.log(
+        db=db,
+        user_id=current_user.id,
+        action="collection.create",
+        resource_type="collection",
+        resource_id=collection.id,
+        detail={"name": collection.name},
+        request=req,
+    )
+    await db.commit()
 
     return CollectionResponse.model_validate(collection)
 
@@ -169,6 +183,18 @@ async def set_collection_tags(
             collection_id=collection_id,
             tag_ids=body.tag_ids,
             db=db,
+        )
+        await db.commit()
+
+        # 审计日志
+        await AuditService.log(
+            db=db,
+            user_id=current_user.id,
+            action="collection.tags_update",
+            resource_type="collection",
+            resource_id=collection_id,
+            detail={"tag_ids": body.tag_ids},
+            request=request,
         )
         await db.commit()
 

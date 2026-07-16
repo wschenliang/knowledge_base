@@ -23,6 +23,7 @@ from app.schemas.chat import (
 )
 from app.services.chat_service import ChatService
 from app.services.favorite_service import FavoriteService
+from app.services.audit_service import AuditService
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +200,7 @@ async def get_conversation(
 @router.delete("/conversations/{conversation_id}", status_code=204)
 async def delete_conversation(
     conversation_id: str,
+    req: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -208,6 +210,17 @@ async def delete_conversation(
     )
     if not deleted:
         raise HTTPException(status_code=404, detail="对话不存在")
+
+    # 审计日志
+    await AuditService.log(
+        db=db,
+        user_id=current_user.id,
+        action="conversation.delete",
+        resource_type="conversation",
+        resource_id=conversation_id,
+        request=req,
+    )
+    await db.commit()
 
 
 @router.put("/conversations/{conversation_id}", response_model=ConversationResponse)
