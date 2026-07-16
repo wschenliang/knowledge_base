@@ -65,15 +65,49 @@ class Settings(BaseSettings):
     EMBEDDING_DIM: int = 1024  # bge-m3 为 1024 维; nomic-embed-text 为 768 维; text-embedding-3-small 为 1536 维
 
     # 邮件配置
-    SMTP_HOST: str = ""
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
-    SMTP_FROM: str = ""
+    SMTP_HOST: str = "smtp.qq.com"
+    SMTP_PORT: int = 465
+    SMTP_USER: str = "chenliang006@qq.com"
+    SMTP_PASSWORD: str = "xeiumagkmgctbfjf"
+    SMTP_FROM: str = "CogniBase <chenliang006@qq.com>"
     SMTP_TLS: bool = True
 
     # 前端地址（用于邮件中的链接）
     FRONTEND_URL: str = "http://localhost:3000"
+
+    # === OAuth 第三方登录 ===
+
+    # Microsoft (Azure AD / 个人微软账号)
+    MICROSOFT_CLIENT_ID: str = ""
+    MICROSOFT_CLIENT_SECRET: str = ""
+    # tenant: common=多租户（个人+企业），organizations=仅企业，consumers=仅个人，<tenant-id>=单租户
+    MICROSOFT_TENANT: str = "common"
+    MICROSOFT_AUTHORIZE_URL: str = "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize"
+    MICROSOFT_TOKEN_URL: str = "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
+    MICROSOFT_USERINFO_URL: str = "https://graph.microsoft.com/oidc/userinfo"
+
+    # GitHub
+    GITHUB_CLIENT_ID: str = ""
+    GITHUB_CLIENT_SECRET: str = ""
+    GITHUB_AUTHORIZE_URL: str = "https://github.com/login/oauth/authorize"
+    GITHUB_TOKEN_URL: str = "https://github.com/login/oauth/access_token"
+    GITHUB_USER_URL: str = "https://api.github.com/user"
+    GITHUB_EMAILS_URL: str = "https://api.github.com/user/emails"
+
+    # 共同 OAuth 配置
+    # 后端可访问的 OAuth 回调起始地址（用于拼接 redirect_uri）。
+    # 开发环境为 http://localhost:8000；线上使用实际公网域名。
+    OAUTH_BACKEND_BASE_URL: str = "http://localhost:8000"
+    # 回调成功后跳回前端的 landing URL（带 token / status 参数）
+    OAUTH_FRONTEND_CALLBACK: str = "http://localhost:3000/oauth-callback"
+    # state 签名密钥：不填则默认回退到 SECRET_KEY
+    OAUTH_STATE_SECRET: str = ""
+    # state 有效期（秒）
+    OAUTH_STATE_TTL: int = 600
+
+    # OAuth 跳转 / 回调 / 绑定路径（用于拼接与同源校验）
+    OAUTH_MICROSOFT_CALLBACK_PATH: str = "/api/v1/auth/oauth/microsoft/callback"
+    OAUTH_GITHUB_CALLBACK_PATH: str = "/api/v1/auth/oauth/github/callback"
 
 
 settings = Settings()
