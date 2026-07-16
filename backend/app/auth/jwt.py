@@ -171,6 +171,16 @@ async def login(request: LoginRequest, req: Request, db: AsyncSession = Depends(
                 detail="用户名或密码错误",
             )
 
+        # OAuth-only 账号没有设置过密码：明确提示走第三方登入，避免与"用户名或密码错误"混淆
+        if not user.password_set:
+            logger.warning(
+                f"登录失败: 账号尚未设置本地密码（OAuth 第三方登入用户）- {request.username}"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="该账号未设置本地密码，请使用第三方账号登入或在个人设置中补设密码",
+            )
+
         if not user.is_active:
             logger.warning(f"登录失败: 用户已被禁用 - {request.username}")
             raise HTTPException(

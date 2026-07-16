@@ -199,8 +199,10 @@ from app.api.dashboard import router as dashboard_router
 from app.api.tags import router as tags_router
 from app.api.favorites import router as favorites_router
 from app.auth.jwt import router as auth_router
+from app.auth.oauth_router import router as oauth_router
 
 app.include_router(auth_router)
+app.include_router(oauth_router)
 app.include_router(collections_router)
 app.include_router(documents_router)
 app.include_router(chat_router)
