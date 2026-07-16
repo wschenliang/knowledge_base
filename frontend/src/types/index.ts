@@ -193,6 +193,7 @@ export interface AuditLogItem {
   resource_id: string;
   detail?: Record<string, unknown> | null;
   ip_address?: string | null;
+  user_agent?: string | null;
   created_at: string;
 }
 
@@ -206,6 +207,9 @@ export interface AuditLogQueryParams {
   action?: string;
   resource_type?: string;
   resource_id?: string;
+  start_time?: string;
+  end_time?: string;
+  keyword?: string;
   skip?: number;
   limit?: number;
 }
@@ -288,4 +292,47 @@ export interface FavoriteItem {
 export interface FavoriteListResponse {
   items: FavoriteItem[];
   total: number;
+}
+
+// ===== 用户管理 =====
+
+export interface UserListItem {
+  id: string;
+  username: string;
+  email?: string;
+  display_name?: string;
+  role: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserListResponse {
+  items: UserListItem[];
+  total: number;
+}
+
+export interface UserUpdateRequest {
+  display_name?: string;
+  role?: "user" | "admin";
+  is_active?: boolean;
+}
+
+export interface UserDetailResponse extends UserListItem {
+  collection_count: number;
+  conversation_count: number;
+  message_count: number;
+  last_login_at?: string | null;
+}
+
+export interface UserStats {
+  total_users: number;
+  active_users: number;
+  admin_users: number;
+  new_today: number;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  new_password: string;
 }
