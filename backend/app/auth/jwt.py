@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import datetime
 import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -228,3 +229,49 @@ async def get_me(current_user: User = Depends(get_current_user)):
         display_name=current_user.display_name,
         role=current_user.role,
     )
+
+
+class ResetPasswordRequest(BaseModel):
+    """密码重置请求"""
+    token: str
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
+@router.post("/reset-password")
+async def reset_password(
+    request: ResetPasswordRequest,
+    req: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """通过邮件 token 重置密码"""
+    payload = decode_access_token(request.token)
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="无效或已过期的重置链接",
+        )
+
+    user_id = payload.get("sub")
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="用户不存在",
+        )
+
+    user.hashed_password = hash_password(request.new_password)
+    await db.flush()
+
+    await AuditService.log(
+        db=db,
+        user_id=user.id,
+        action="auth.reset_password",
+        resource_type="user",
+        resource_id=user.id,
+        detail={"username": user.username},
+        request=req,
+    )
+    await db.commit()
+
+    return {"message": "密码重置成功"}
