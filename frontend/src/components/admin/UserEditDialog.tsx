@@ -5,7 +5,7 @@ import type { UserListItem } from "@/types";
 interface UserEditDialogProps {
   open: boolean;
   user: UserListItem | null;
-  onSave: (userId: string, data: { display_name?: string; role?: string }) => void;
+  onSave: (userId: string, data: { display_name?: string; role?: "user" | "admin" }) => void;
   onClose: () => void;
 }
 
@@ -23,9 +23,9 @@ export default function UserEditDialog({ open, user, onSave, onClose }: UserEdit
   if (!open || !user) return null;
 
   const handleSave = () => {
-    const data: { display_name?: string; role?: string } = {};
+    const data: { display_name?: string; role?: "user" | "admin" } = {};
     if (displayName !== (user.display_name || "")) data.display_name = displayName;
-    if (role !== user.role) data.role = role;
+    if (role !== user.role) data.role = role as "user" | "admin";
     onSave(user.id, data);
   };
 

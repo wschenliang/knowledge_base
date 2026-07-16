@@ -153,6 +153,8 @@ export default function Layout({
 function getPageTitle(pathname: string | null): string {
   if (!pathname) return "知识库";
   if (pathname.startsWith("/dashboard")) return "数据概览";
+  if (pathname.startsWith("/audit-logs")) return "审计日志";
+  if (pathname.startsWith("/admin/users")) return "用户管理";
   if (pathname.startsWith("/knowledge-bases")) return "我的知识库";
   if (pathname.startsWith("/search")) return "语义搜索";
   if (pathname.startsWith("/chat")) return "智能问答";
