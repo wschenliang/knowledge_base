@@ -49,3 +49,6 @@ loguru==0.7.3
 rank-bm25
 prometheus-fastapi-instrumentator
 gunicorn
+
+# 邮件
+aiosmtplib>=3.0.0
