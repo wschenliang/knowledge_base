@@ -2,9 +2,71 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Camera, X } from "lucide-react";
+import { Camera, X, ShieldCheck, Link2, Unlink, Loader2 } from "lucide-react";
 import type { User } from "@/types";
 import { fileToDataUrl, loadAvatar, saveAvatar } from "@/lib/avatar";
+import { api } from "@/lib/api";
+import ConfirmDialog from "@/components/ConfirmDialog";
+
+interface OAuthBindingInfo {
+  provider: string;
+  provider_email?: string | null;
+  provider_display_name?: string | null;
+  avatar_url?: string | null;
+  created_at?: string | null;
+}
+
+interface OAuthProviderInfo {
+  name: string;
+  configured: boolean;
+}
+
+/* 品牌图标（同 LoginForm，复用内联 SVG） */
+function MicrosoftIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect x="1" y="1" width="10" height="10" fill="#F25022" />
+      <rect x="13" y="1" width="10" height="10" fill="#7FBA00" />
+      <rect x="1" y="13" width="10" height="10" fill="#00A4EF" />
+      <rect x="13" y="13" width="10" height="10" fill="#FFB900" />
+    </svg>
+  );
+}
+
+function GitHubIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.522 2 12 2Z"
+      />
+    </svg>
+  );
+}
+
+function providerBrand(p: string): React.ReactNode {
+  if (p === "microsoft") return <MicrosoftIcon className="h-4 w-4" />;
+  if (p === "github") return <GitHubIcon className="h-4 w-4 text-slate-900" />;
+  return <Link2 className="h-4 w-4 text-slate-500" />;
+}
+
+function providerLabel(p: string): string {
+  if (p === "microsoft") return "Microsoft";
+  if (p === "github") return "GitHub";
+  return p;
+}
 
 interface Props {
   open: boolean;
@@ -41,6 +103,92 @@ export default function ProfileDialog({ open, user, onAvatarChange, onClose }: P
   // 客户端挂载标志：createPortal 需要 document.body，仅在浏览器端可用；
   // 用 mounted 防止 SSR 期间渲染 portal 导致 hydration mismatch。
   const [mounted, setMounted] = useState(false);
+
+  // ===== OAuth 绑定状态 =====
+  const [oauthProviders, setOauthProviders] = useState<OAuthProviderInfo[]>([]);
+  const [oauthBindings, setOauthBindings] = useState<OAuthBindingInfo[]>([]);
+  const [oauthPasswordSet, setOauthPasswordSet] = useState(true);
+  const [oauthLoading, setOauthLoading] = useState(false);
+  const [oauthPending, setOauthPending] = useState<string | null>(null);
+  const [unbindTarget, setUnbindTarget] = useState<{
+    provider: string;
+    email?: string | null;
+  } | null>(null);
+
+  // 弹窗打开 → 拉取 OAuth 详情
+  useEffect(() => {
+    if (!open || !mounted) return;
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOauthLoading(true);
+    Promise.all([api.listOAuthProviders(), api.listOAuthBindings()])
+      .then(([providers, bindings]) => {
+        if (cancelled) return;
+        setOauthProviders(
+          (providers.providers || []).filter((p) => p.configured),
+        );
+        setOauthBindings(bindings.bindings || []);
+        setOauthPasswordSet(Boolean(bindings.password_set));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setOauthProviders([]);
+        setOauthBindings([]);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setOauthLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, mounted]);
+
+  /** 根据 provider 名查找当前绑定记录 */
+  const findBinding = (provider: string) =>
+    oauthBindings.find((b) => b.provider === provider) || null;
+
+  /** 解锁一个 Provider：调用 startOAuthBind 获得 authorize_url，跳走 */
+  const handleStartBind = async (provider: string) => {
+    setError("");
+    setOauthPending(provider);
+    try {
+      const res = await api.startOAuthBind(provider);
+      // 全跳：让用户走完 Provider 授权，回到 /oauth-callback。
+      // 用 assign() 方法调用代替直接赋值 href，避免 lint 规则对
+      // "外部变量不可变" 的误报；二者语义等价。
+      window.location.assign(res.authorize_url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "发起绑定失败");
+      setOauthPending(null);
+    }
+  };
+
+  /** 解绑请求：确认弹窗 → DELETE → 重新拉列表 */
+  const confirmUnbind = async () => {
+    if (!unbindTarget) return;
+    const provider = unbindTarget.provider;
+    setError("");
+    setOauthPending(provider);
+    setUnbindTarget(null);
+    try {
+      await api.unbindOAuthProvider(provider);
+      const fresh = await api.listOAuthBindings();
+      setOauthBindings(fresh.bindings || []);
+      setOauthPasswordSet(Boolean(fresh.password_set));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "解绑失败");
+    } finally {
+      setOauthPending(null);
+    }
+  };
+
+  /** 判断某 Provider 的解绑是否允许（保留至少一种登入方式） */
+  const canUnbind = (provider: string) => {
+    if (oauthPasswordSet) return true;
+    const others = oauthBindings.filter((b) => b.provider !== provider);
+    return others.length > 0;
+  };
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -202,6 +350,93 @@ export default function ProfileDialog({ open, user, onAvatarChange, onClose }: P
           </p>
         </div>
 
+        {/* 第三方账号 */}
+        {oauthProviders.length > 0 && (
+          <div className="px-6 pb-4">
+            <div className="mb-2 flex items-center gap-2">
+              <ShieldCheck className="h-3.5 w-3.5 text-slate-500" />
+              <label className="block text-xs font-medium text-slate-600">
+                第三方账号
+              </label>
+            </div>
+            <div className="space-y-2">
+              {oauthLoading && (
+                <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  加载中...
+                </div>
+              )}
+              {!oauthLoading && oauthProviders.map((p) => {
+                const binding = findBinding(p.name);
+                const bound = !!binding;
+                const allowed = !bound || canUnbind(p.name);
+                const disabled = oauthPending === p.name;
+                return (
+                  <div
+                    key={p.name}
+                    className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2"
+                  >
+                    <div className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-50 border border-slate-200">
+                      {providerBrand(p.name)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-800">
+                        {providerLabel(p.name)}
+                      </p>
+                      <p className="truncate text-xs text-slate-500">
+                        {bound
+                          ? binding?.provider_email ||
+                            binding?.provider_display_name ||
+                            "已绑定"
+                          : "未绑定"}
+                      </p>
+                    </div>
+                    {bound ? (
+                      <button
+                        type="button"
+                        disabled={!allowed || disabled}
+                        onClick={() =>
+                          setUnbindTarget({
+                            provider: p.name,
+                            email: binding?.provider_email,
+                          })
+                        }
+                        title={!allowed ? "请先设置密码或绑定其他方式" : undefined}
+                        className="flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+                      >
+                        {disabled ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Unlink className="h-3 w-3" />
+                        )}
+                        解绑
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => handleStartBind(p.name)}
+                        className="rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+                      >
+                        {disabled ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          "绑定"
+                        )}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              {!oauthPasswordSet && oauthBindings.length === 0 && (
+                <p className="pt-1 text-[11px] text-amber-600">
+                  你当前未设置本地密码，请至少绑定一种第三方登入方式。
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* 操作按钮 */}
         <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-6 py-3">
           <button
@@ -222,6 +457,23 @@ export default function ProfileDialog({ open, user, onAvatarChange, onClose }: P
           </button>
         </div>
       </div>
+
+      {/* 解绑确认弹窗 */}
+      <ConfirmDialog
+        open={unbindTarget !== null}
+        title={`解绑 ${unbindTarget ? providerLabel(unbindTarget.provider) : ""}？`}
+        message={
+          unbindTarget
+            ? `解绑后将无法再通过 ${providerLabel(unbindTarget.provider)} 登入该账号${
+                unbindTarget.email ? `（绑定的邮箱：${unbindTarget.email}）` : ""
+              }。确认要继续吗？`
+            : ""
+        }
+        confirmLabel="确认解绑"
+        confirmVariant="danger"
+        onConfirm={confirmUnbind}
+        onCancel={() => setUnbindTarget(null)}
+      />
     </div>,
     document.body
   );
