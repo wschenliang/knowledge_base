@@ -7,10 +7,11 @@ import { useAuth } from "@/lib/auth-context";
 import Layout from "@/components/Layout";
 import DocumentList from "@/components/DocumentList";
 import CollectionMemberManager from "@/components/CollectionMemberManager";
+import TagInput from "@/components/TagInput";
 import RoleBadge from "@/components/RoleBadge";
 import { canEdit } from "@/lib/permissions";
-import type { Collection, AclRole } from "@/types";
-import { ChevronRight, FileText, Calendar, Database, Home } from "lucide-react";
+import type { Collection, AclRole, Tag } from "@/types";
+import { ChevronRight, FileText, Calendar, Database, Home, Tag as TagIcon } from "lucide-react";
 import Link from "next/link";
 
 export default function CollectionDetailPage() {
@@ -20,12 +21,21 @@ export default function CollectionDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"overview" | "members">("overview");
+  const [allTags, setAllTags] = useState<Tag[]>([]);
+  const [tagIds, setTagIds] = useState<string[]>([]);
+  const [tagsSaving, setTagsSaving] = useState(false);
 
   useEffect(() => {
     if (!authLoading && isAuthenticated && id) {
-      api
-        .getCollection(id)
-        .then(setCollection)
+      Promise.all([
+        api.getCollection(id),
+        api.listTags(),
+      ])
+        .then(([coll, tagResult]) => {
+          setCollection(coll);
+          setAllTags(tagResult.items);
+          setTagIds(coll.tags?.map((t) => t.id) || []);
+        })
         .catch((err) => setError(err instanceof Error ? err.message : "加载失败"))
         .finally(() => setLoading(false));
     }
@@ -34,6 +44,30 @@ export default function CollectionDetailPage() {
   if (authLoading) return null;
 
   const myRole = collection?.my_role as AclRole | undefined;
+
+  const handleTagsChange = async (newTagIds: string[]) => {
+    if (!id) return;
+    setTagIds(newTagIds);
+    setTagsSaving(true);
+    try {
+      const updatedTags = await api.setCollectionTags(id, newTagIds);
+      // 更新 collection 的 tags
+      if (collection) {
+        setCollection({ ...collection, tags: updatedTags });
+      }
+      // 刷新所有标签列表
+      const tagResult = await api.listTags();
+      setAllTags(tagResult.items);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "标签更新失败");
+    } finally {
+      setTagsSaving(false);
+    }
+  };
+
+  const handleCreateTag = async (name: string): Promise<Tag> => {
+    return api.createTag(name);
+  };
 
   return (
     <Layout>
@@ -114,6 +148,42 @@ export default function CollectionDetailPage() {
                     <p className="text-xs text-slate-500">ID</p>
                   </div>
                 </div>
+              </div>
+
+              {/* 标签管理 */}
+              <div className="mt-5 pt-5 border-t border-slate-100">
+                <div className="flex items-center gap-2 mb-3">
+                  <TagIcon className="h-4 w-4 text-slate-500" />
+                  <span className="text-sm font-medium text-slate-700">标签</span>
+                  {tagsSaving && (
+                    <span className="text-xs text-slate-400">保存中...</span>
+                  )}
+                </div>
+                {canEdit(myRole) ? (
+                  <TagInput
+                    value={tagIds}
+                    onChange={handleTagsChange}
+                    availableTags={allTags}
+                    onCreateTag={handleCreateTag}
+                    placeholder="输入标签名称，回车添加"
+                  />
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {collection.tags && collection.tags.length > 0 ? (
+                      collection.tags.map((tag) => (
+                        <span
+                          key={tag.id}
+                          className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium text-white"
+                          style={{ backgroundColor: tag.color || "#6366F1" }}
+                        >
+                          {tag.name}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm text-slate-400">暂无标签</span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 

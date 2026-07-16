@@ -1,37 +1,30 @@
-"use client";
+import LandingNav from "@/components/landing/LandingNav";
+import LandingHero from "@/components/landing/LandingHero";
+import LandingFeatures from "@/components/landing/LandingFeatures";
+import LandingCTA from "@/components/landing/LandingCTA";
+import LandingFooter from "@/components/landing/LandingFooter";
+import type { Metadata } from "next";
 
-import { useEffect } from "react";
-import { useAuth } from "@/lib/auth-context";
-import { useRouter } from "next/navigation";
-import LoginForm from "@/components/LoginForm";
+export const metadata: Metadata = {
+  title: "CogniBase - 企业级智能知识库",
+  description: "基于 RAG 技术的企业级知识库平台，智能文档管理、语义搜索与 AI 问答，一站式解决企业知识沉淀与流转难题。",
+};
 
-export default function Home() {
-  const { isAuthenticated, loading } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!loading && isAuthenticated) {
-      router.push("/dashboard");
-    }
-  }, [loading, isAuthenticated, router]);
-
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-3">
-          <div className="relative">
-            <div className="h-12 w-12 rounded-full border-4 border-slate-200" />
-            <div className="absolute inset-0 h-12 w-12 animate-spin rounded-full border-4 border-transparent border-t-blue-600" />
-          </div>
-          <p className="text-sm text-slate-500">加载中...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (isAuthenticated) {
-    return null;
-  }
-
-  return <LoginForm />;
+/**
+ * 主页（根路由 /）
+ * - 未登录用户：展示产品介绍 Landing Page
+ * - 已登录用户：由 RequireGuest 守卫自动跳 /dashboard（暂不引入，保持简洁）
+ *
+ * 结构：固定导航 → Hero → 功能特性 → CTA → 页脚
+ */
+export default function HomePage() {
+  return (
+    <main className="min-h-screen bg-white">
+      <LandingNav />
+      <LandingHero />
+      <LandingFeatures />
+      <LandingCTA />
+      <LandingFooter />
+    </main>
+  );
 }

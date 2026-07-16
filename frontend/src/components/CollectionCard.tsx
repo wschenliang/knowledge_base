@@ -59,6 +59,21 @@ export default function CollectionCard({ collection }: Props) {
           </div>
         </div>
 
+        {/* 标签展示 */}
+        {collection.tags && collection.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-3">
+            {collection.tags.map((tag) => (
+              <span
+                key={tag.id}
+                className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium text-white"
+                style={{ backgroundColor: tag.color || "#6366F1" }}
+              >
+                {tag.name}
+              </span>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-center gap-4 text-xs text-slate-500 pt-3 border-t border-slate-100">
           <span className="flex items-center gap-1.5">
             <FileText className="h-3.5 w-3.5 text-slate-400" />

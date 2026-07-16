@@ -6,6 +6,8 @@ export interface User {
   email?: string;
   display_name?: string;
   role: string;
+  /** 头像：dataURL（前端 localStorage 持久化，无需后端存储） */
+  avatar?: string;
 }
 
 export interface AuthTokens {
@@ -27,6 +29,21 @@ export interface Collection {
   created_at: string;
   updated_at: string;
   my_role?: "owner" | "editor" | "viewer"; // 当前用户对此 KB 的 ACL 角色
+  tags?: Tag[]; // 该知识库的标签
+}
+
+export interface Tag {
+  id: string;
+  name: string;
+  color?: string;
+  created_by?: string;
+  collection_count: number;
+  created_at: string;
+}
+
+export interface TagListResponse {
+  items: Tag[];
+  total: number;
 }
 
 export interface CollectionList {
@@ -54,9 +71,11 @@ export interface DocumentList {
 }
 
 export interface ChatMessage {
+  id?: string;
   role: "user" | "assistant";
   content: string;
   sources?: SourceItem[];
+  is_favorited?: boolean;
 }
 
 export interface SourceItem {
@@ -113,6 +132,7 @@ export interface ConversationItem {
   collection_id: string;
   title: string;
   message_count: number;
+  has_favorite?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -249,4 +269,23 @@ export interface DashboardStats {
   top_collections: TopCollectionItem[];
   top_users: TopUserItem[] | null;
   top_questions: TopQuestionItem[];
+}
+
+// ===== 收藏 =====
+
+export interface FavoriteItem {
+  id: string;
+  message_id: string;
+  conversation_id: string;
+  collection_id: string;
+  note: string | null;
+  message_content: string;
+  question_content: string | null;
+  collection_name: string | null;
+  created_at: string;
+}
+
+export interface FavoriteListResponse {
+  items: FavoriteItem[];
+  total: number;
 }

@@ -13,10 +13,13 @@ import {
   BookOpen,
   Sparkles,
   BarChart3,
-  LogOut,
   MessageSquare,
   PanelLeftClose,
+  Heart,
 } from "lucide-react";
+import UserMenu from "@/components/UserMenu";
+import ProfileDialog from "@/components/ProfileDialog";
+import { loadAvatar } from "@/lib/avatar";
 
 interface Props {
   activeConversationId: string | null;
@@ -34,6 +37,7 @@ const toolItems = [
   { href: "/knowledge-bases", label: "我的知识库", icon: BookOpen },
   { href: "/search", label: "语义搜索", icon: Search },
   { href: "/chat", label: "智能问答", icon: Sparkles },
+  { href: "/favorites", label: "我的收藏", icon: Heart },
 ];
 
 export default function ChatSidebar({
@@ -49,6 +53,13 @@ export default function ChatSidebar({
   const pathname = usePathname();
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [loading, setLoading] = useState(showConversations);
+  const [profileOpen, setProfileOpen] = useState(false);
+  // 头像：父组件管理 state。初始值通过 lazy initializer 同步从 localStorage 派生；
+  // 保存后通过 ProfileDialog 的 onAvatarChange 回调更新；
+  // user 切换时通过下方 effect 重新读取。
+  const [avatar, setAvatar] = useState<string | null>(
+    () => loadAvatar(user?.id) || user?.avatar || null
+  );
 
   const load = useCallback(async () => {
     if (!showConversations) {
@@ -66,9 +77,20 @@ export default function ChatSidebar({
     }
   }, [showConversations]);
 
+  // 加载对话列表：原有逻辑保留；监听 load 引用与 refreshKey。
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load, refreshKey]);
+
+  // 头像：user 变化时重新读取 localStorage（用户切换场景）。
+  // 此处允许 set-state-in-effect：监听的是 React state（user）变化，
+  // 这是合法的"派生同步"场景，但 ESLint 默认严格不允许。
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAvatar(loadAvatar(user?.id) || user?.avatar || null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -103,7 +125,7 @@ export default function ChatSidebar({
           <div className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-blue-500 to-indigo-600">
             <Database className="h-3.5 w-3.5 text-white" strokeWidth={2.5} />
           </div>
-          <span className="text-sm font-semibold text-slate-800">KnowledgeBase</span>
+          <span className="text-sm font-semibold text-slate-800">CogniBase</span>
           <svg viewBox="0 0 20 20" className="h-3.5 w-3.5 text-slate-500 transition-transform group-hover:translate-y-0.5" fill="currentColor">
             <path d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" />
           </svg>
@@ -185,6 +207,12 @@ export default function ChatSidebar({
                     <p className="truncate text-[13px] leading-tight pr-6">
                       {conv.title}
                     </p>
+                    {conv.has_favorite && (
+                      <Heart
+                        className="absolute right-8 top-1/2 -translate-y-1/2 h-3 w-3 text-rose-400"
+                        fill="currentColor"
+                      />
+                    )}
                     <span className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <span
                         role="button"
@@ -209,30 +237,36 @@ export default function ChatSidebar({
         <div className="flex-1" />
       )}
 
-      {/* 用户区 */}
-      <div className="border-t border-slate-200/70 p-3">
-        <div className="flex items-center gap-2.5 rounded-lg p-1.5 hover:bg-slate-200/60 transition-colors">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-xs font-semibold text-white shadow-sm">
-            {user?.username?.charAt(0).toUpperCase() || "U"}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-medium text-slate-800 truncate">
-              {user?.display_name || user?.username}
-            </p>
-            <p className="text-[11px] text-slate-500 truncate">
-              {user?.role === "admin" ? "管理员" : "普通用户"}
-            </p>
-          </div>
-          <button
-            onClick={logout}
-            className="rounded p-1.5 text-slate-400 hover:bg-slate-300/60 hover:text-slate-700 transition-colors"
-            title="退出登录"
-          >
-            <LogOut className="h-3.5 w-3.5" />
-          </button>
+      {/* 用户区 — 弹出菜单 + 个人资料弹窗 */}
+      {user && (
+        <div className="border-t border-slate-200/70 p-3">
+          <UserMenu
+            user={user}
+            avatar={avatar}
+            onOpenProfile={() => setProfileOpen(true)}
+            onOpenSettings={() => {
+              // 占位：未来可跳转到独立设置页 /chat/settings
+              // 当前仅作提示，避免直接占用路由
+              alert("设置面板开发中，敬请期待");
+            }}
+            onOpenHelp={() => {
+              // 占位：可打开帮助文档链接
+              alert("帮助文档开发中，敬请期待");
+            }}
+            onLogout={logout}
+          />
         </div>
-      </div>
+      )}
+
+      {/* 编辑个人资料弹窗 */}
+      {user && (
+        <ProfileDialog
+          open={profileOpen}
+          user={user}
+          onAvatarChange={(next) => setAvatar(next)}
+          onClose={() => setProfileOpen(false)}
+        />
+      )}
     </aside>
   );
 }
-

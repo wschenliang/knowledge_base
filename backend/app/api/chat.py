@@ -22,11 +22,13 @@ from app.schemas.chat import (
     RenameConversationRequest,
 )
 from app.services.chat_service import ChatService
+from app.services.favorite_service import FavoriteService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/chat", tags=["知识问答"])
 chat_service = ChatService()
+favorite_service = FavoriteService()
 
 
 @router.post("", response_model=ChatResponse)
@@ -136,8 +138,19 @@ async def list_conversations(
         limit=limit,
         db=db,
     )
+
+    # 批量检查每个对话是否含收藏
+    items = []
+    for conv in conversations:
+        has_fav = await favorite_service.get_conversation_has_favorite(
+            current_user.id, conv.id, db
+        )
+        resp = ConversationResponse.model_validate(conv)
+        resp.has_favorite = has_fav
+        items.append(resp)
+
     return ConversationList(
-        items=[ConversationResponse.model_validate(c) for c in conversations],
+        items=items,
         total=total,
     )
 
@@ -155,6 +168,12 @@ async def get_conversation(
 
     messages = await chat_service.get_conversation_messages(conversation_id, db)
 
+    # 批量检查消息收藏状态
+    msg_ids = [m.id for m in messages]
+    fav_status = await favorite_service.batch_check_favorited(
+        current_user.id, msg_ids, db
+    )
+
     result = ConversationDetail(
         id=conv.id,
         collection_id=conv.collection_id,
@@ -162,7 +181,17 @@ async def get_conversation(
         message_count=conv.message_count,
         created_at=conv.created_at,
         updated_at=conv.updated_at,
-        messages=[MessageResponse.model_validate(m) for m in messages],
+        messages=[
+            MessageResponse(
+                id=m.id,
+                role=m.role,
+                content=m.content,
+                sources=MessageResponse.model_validate(m).sources,
+                is_favorited=fav_status.get(m.id, False),
+                created_at=m.created_at,
+            )
+            for m in messages
+        ],
     )
     return result
 

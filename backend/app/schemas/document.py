@@ -5,7 +5,44 @@ from __future__ import annotations
 import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+# ===== 标签相关 =====
+
+class TagCreate(BaseModel):
+    """创建标签请求"""
+    name: str = Field(..., min_length=1, max_length=50)
+    color: Optional[str] = Field(None, max_length=7)  # hex color e.g. #3B82F6
+
+
+class TagUpdate(BaseModel):
+    """更新标签请求"""
+    name: Optional[str] = Field(None, min_length=1, max_length=50)
+    color: Optional[str] = Field(None, max_length=7)
+
+
+class TagResponse(BaseModel):
+    """标签响应"""
+    id: str
+    name: str
+    color: Optional[str] = None
+    created_by: Optional[str] = None
+    collection_count: int = 0
+    created_at: datetime.datetime
+
+    model_config = {"from_attributes": True}
+
+
+class TagListResponse(BaseModel):
+    """标签列表"""
+    items: list[TagResponse]
+    total: int
+
+
+class CollectionTagUpdate(BaseModel):
+    """设置知识库标签请求（全量替换）"""
+    tag_ids: list[str]
 
 
 class DocumentCreate(BaseModel):
@@ -61,6 +98,7 @@ class CollectionResponse(BaseModel):
     created_at: datetime.datetime
     updated_at: datetime.datetime
     my_role: Optional[str] = None  # 当前用户对此 KB 的角色（acl.get_role）
+    tags: list[TagResponse] = []  # 该知识库的标签
 
     model_config = {"from_attributes": True}
 

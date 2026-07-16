@@ -6,7 +6,9 @@ import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
 import Layout from "@/components/Layout";
 import CollectionCard from "@/components/CollectionCard";
-import type { Collection } from "@/types";
+import TagFilter from "@/components/TagFilter";
+import TagInput from "@/components/TagInput";
+import type { Collection, Tag } from "@/types";
 import { Plus, Database, FileText, X, FolderOpen } from "lucide-react";
 
 export default function KnowledgeBasesPage() {
@@ -18,18 +20,25 @@ export default function KnowledgeBasesPage() {
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [error, setError] = useState("");
+  const [allTags, setAllTags] = useState<Tag[]>([]);
+  const [selectedFilterTags, setSelectedFilterTags] = useState<string[]>([]);
+  const [newTagIds, setNewTagIds] = useState<string[]>([]);
 
   const loadCollections = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await api.listCollections();
-      setCollections(result.items);
+      const [collResult, tagResult] = await Promise.all([
+        api.listCollections(selectedFilterTags.length > 0 ? selectedFilterTags : undefined),
+        api.listTags(),
+      ]);
+      setCollections(collResult.items);
+      setAllTags(tagResult.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : "加载知识库失败");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedFilterTags]);
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
@@ -41,14 +50,23 @@ export default function KnowledgeBasesPage() {
     if (!newName.trim()) return;
     setError("");
     try {
-      await api.createCollection(newName.trim(), newDesc.trim() || undefined);
+      const collection = await api.createCollection(newName.trim(), newDesc.trim() || undefined);
+      // 如果选择了标签，设置到新知识库
+      if (newTagIds.length > 0) {
+        await api.setCollectionTags(collection.id, newTagIds);
+      }
       setShowCreate(false);
       setNewName("");
       setNewDesc("");
+      setNewTagIds([]);
       await loadCollections();
     } catch (err) {
       setError(err instanceof Error ? err.message : "创建失败");
     }
+  };
+
+  const handleCreateTag = async (name: string): Promise<Tag> => {
+    return api.createTag(name);
   };
 
   if (authLoading) return null;
@@ -63,6 +81,17 @@ export default function KnowledgeBasesPage() {
           <h1 className="text-2xl font-bold text-slate-900">我的知识库</h1>
           <p className="mt-1 text-sm text-slate-500">管理和组织您的文档知识库</p>
         </div>
+
+        {/* 标签筛选 */}
+        {allTags.length > 0 && (
+          <div className="mb-4">
+            <TagFilter
+              tags={allTags}
+              selectedTags={selectedFilterTags}
+              onChange={setSelectedFilterTags}
+            />
+          </div>
+        )}
 
         {/* 统计概览 */}
         <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -183,6 +212,16 @@ export default function KnowledgeBasesPage() {
                   rows={3}
                   className="block w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 outline-none transition-all resize-none"
                   placeholder="可选，描述知识库用途"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">标签</label>
+                <TagInput
+                  value={newTagIds}
+                  onChange={setNewTagIds}
+                  availableTags={allTags}
+                  onCreateTag={handleCreateTag}
+                  placeholder="输入标签名称，回车添加"
                 />
               </div>
               <div className="flex gap-3 pt-2">

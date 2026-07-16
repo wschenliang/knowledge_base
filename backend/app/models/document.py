@@ -6,9 +6,16 @@ import datetime
 import uuid
 from typing import Optional
 
-from sqlalchemy import DateTime, String, Text, Boolean, Integer, ForeignKey, Enum as SAEnum
+from sqlalchemy import DateTime, String, Text, Boolean, Integer, ForeignKey, Enum as SAEnum, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
+
+
+# 默认标签颜色调色板
+DEFAULT_TAG_COLORS = [
+    "#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6",
+    "#EC4899", "#06B6D4", "#84CC16", "#F97316", "#6366F1",
+]
 
 
 class Base(DeclarativeBase):
@@ -87,9 +94,51 @@ class Collection(Base):
         back_populates="collection", cascade="all, delete-orphan"
     )
     owner: Mapped[Optional["User"]] = relationship(back_populates="collections")
+    tags: Mapped[list["Tag"]] = relationship(
+        secondary="collection_tags", back_populates="collections", lazy="selectin"
+    )
 
     def __repr__(self) -> str:
         return f"<Collection(id={self.id}, name={self.name})>"
+
+
+class Tag(Base):
+    """全局标签模型"""
+
+    __tablename__ = "tags"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    name: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    color: Mapped[Optional[str]] = mapped_column(String(7))  # hex color e.g. #3B82F6
+    created_by: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # 关系
+    collections: Mapped[list["Collection"]] = relationship(
+        secondary="collection_tags", back_populates="tags"
+    )
+
+    def __repr__(self) -> str:
+        return f"<Tag(id={self.id}, name={self.name})>"
+
+
+class CollectionTag(Base):
+    """知识库-标签关联表（多对多）"""
+
+    __tablename__ = "collection_tags"
+
+    collection_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("collections.id", ondelete="CASCADE"), primary_key=True
+    )
+    tag_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True
+    )
 
 
 class User(Base):
@@ -145,6 +194,38 @@ class Conversation(Base):
 
     def __repr__(self) -> str:
         return f"<Conversation(id={self.id}, title={self.title})>"
+
+
+class Favorite(Base):
+    """用户收藏的消息"""
+
+    __tablename__ = "favorites"
+    __table_args__ = (
+        UniqueConstraint("user_id", "message_id", name="uq_favorite_user_message"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    message_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("messages.id", ondelete="CASCADE"), nullable=False
+    )
+    conversation_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
+    )
+    collection_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("collections.id", ondelete="CASCADE"), nullable=False
+    )
+    note: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    def __repr__(self) -> str:
+        return f"<Favorite(id={self.id}, message_id={self.message_id})>"
 
 
 class Message(Base):

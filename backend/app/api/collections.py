@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.jwt import get_current_user
@@ -12,11 +12,15 @@ from app.schemas.document import (
     CollectionCreate,
     CollectionList,
     CollectionResponse,
+    CollectionTagUpdate,
+    TagResponse,
 )
 from app.services.document_service import DocumentService
+from app.services.tag_service import TagService
 
 router = APIRouter(prefix="/api/v1/collections", tags=["知识库集合"])
 document_service = DocumentService()
+tag_service = TagService()
 
 
 @router.post("", response_model=CollectionResponse, status_code=status.HTTP_201_CREATED)
@@ -55,12 +59,13 @@ async def create_collection(
 async def list_collections(
     skip: int = 0,
     limit: int = 100,
+    tag: list[str] = Query(default=[], description="按标签筛选（标签名称，支持多个）"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """列出知识库集合（admin 看全部；普通用户仅看自己有 ACL 的）"""
     collections, total = await document_service.list_collections(
-        db=db, user=current_user, skip=skip, limit=limit
+        db=db, user=current_user, skip=skip, limit=limit, tag_names=tag
     )
 
     # 为每个 KB 附带当前用户角色
@@ -108,3 +113,81 @@ async def get_collection(
             current_user.id, collection_id, db
         )
     return response
+
+
+# ===== 知识库标签管理 =====
+
+@router.get("/{collection_id}/tags", response_model=list[TagResponse])
+async def get_collection_tags(
+    request: Request,
+    collection_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """获取知识库的标签列表（viewer+）"""
+    from app.auth.permissions import require_collection_role
+
+    await require_collection_role(
+        request, min_role="viewer", db=db, current_user=current_user
+    )
+
+    tags = await tag_service.get_collection_tags(collection_id, db)
+    items, _ = await tag_service.list_tags(db)
+    count_map = {item["id"]: item["collection_count"] for item in items}
+
+    return [
+        TagResponse(
+            id=t.id,
+            name=t.name,
+            color=t.color,
+            created_by=t.created_by,
+            collection_count=count_map.get(t.id, 0),
+            created_at=t.created_at,
+        )
+        for t in tags
+    ]
+
+
+@router.put("/{collection_id}/tags", response_model=list[TagResponse])
+async def set_collection_tags(
+    request: Request,
+    collection_id: str,
+    body: CollectionTagUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """设置知识库标签（全量替换，需要 editor+）"""
+    from app.auth.permissions import require_collection_role
+
+    request.path_params["collection_id"] = collection_id
+    await require_collection_role(
+        request, min_role="editor", db=db, current_user=current_user
+    )
+
+    try:
+        tags = await tag_service.set_collection_tags(
+            collection_id=collection_id,
+            tag_ids=body.tag_ids,
+            db=db,
+        )
+        await db.commit()
+
+        items, _ = await tag_service.list_tags(db)
+        count_map = {item["id"]: item["collection_count"] for item in items}
+
+        return [
+            TagResponse(
+                id=t.id,
+                name=t.name,
+                color=t.color,
+                created_by=t.created_by,
+                collection_count=count_map.get(t.id, 0),
+                created_at=t.created_at,
+            )
+            for t in tags
+        ]
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )

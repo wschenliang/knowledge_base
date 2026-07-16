@@ -55,6 +55,7 @@ class MessageResponse(BaseModel):
     role: str
     content: str
     sources: Optional[list[SourceItem]] = None
+    is_favorited: bool = False
     created_at: datetime.datetime
 
     model_config = {"from_attributes": True}
@@ -77,6 +78,7 @@ class ConversationResponse(BaseModel):
     collection_id: str
     title: str
     message_count: int
+    has_favorite: bool = False
     created_at: datetime.datetime
     updated_at: datetime.datetime
 

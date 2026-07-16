@@ -25,6 +25,10 @@ import type {
   AuditLogQueryParams,
   PreviewResponse,
   DashboardStats,
+  Tag,
+  TagListResponse,
+  FavoriteItem,
+  FavoriteListResponse,
 } from "@/types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -111,8 +115,11 @@ class ApiClient {
   }
 
   // 知识库集合
-  async listCollections(): Promise<CollectionList> {
-    return this.request<CollectionList>("/api/v1/collections");
+  async listCollections(tags?: string[]): Promise<CollectionList> {
+    const params = tags && tags.length > 0
+      ? `?${tags.map(t => `tag=${encodeURIComponent(t)}`).join("&")}`
+      : "";
+    return this.request<CollectionList>(`/api/v1/collections${params}`);
   }
 
   async getCollection(id: string): Promise<Collection> {
@@ -341,6 +348,43 @@ class ApiClient {
     );
   }
 
+  // ===== 标签管理 =====
+
+  async listTags(): Promise<TagListResponse> {
+    return this.request<TagListResponse>("/api/v1/tags");
+  }
+
+  async createTag(name: string, color?: string): Promise<Tag> {
+    return this.request<Tag>("/api/v1/tags", {
+      method: "POST",
+      body: JSON.stringify({ name, color }),
+    });
+  }
+
+  async updateTag(id: string, data: { name?: string; color?: string }): Promise<Tag> {
+    return this.request<Tag>(`/api/v1/tags/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteTag(id: string): Promise<void> {
+    return this.request<void>(`/api/v1/tags/${id}`, {
+      method: "DELETE",
+    });
+  }
+
+  async getCollectionTags(collectionId: string): Promise<Tag[]> {
+    return this.request<Tag[]>(`/api/v1/collections/${collectionId}/tags`);
+  }
+
+  async setCollectionTags(collectionId: string, tagIds: string[]): Promise<Tag[]> {
+    return this.request<Tag[]>(`/api/v1/collections/${collectionId}/tags`, {
+      method: "PUT",
+      body: JSON.stringify({ tag_ids: tagIds }),
+    });
+  }
+
   // ===== Admin 审计日志 =====
 
   async listAuditLogs(params: AuditLogQueryParams = {}): Promise<AuditLogListResponse> {
@@ -361,6 +405,52 @@ class ApiClient {
 
   async getDashboardStats(days: number = 7): Promise<DashboardStats> {
     return this.request<DashboardStats>(`/api/v1/dashboard/stats?days=${days}`);
+  }
+
+  // ===== 收藏 =====
+
+  async addFavorite(messageId: string, note?: string): Promise<FavoriteItem> {
+    return this.request<FavoriteItem>("/api/v1/favorites", {
+      method: "POST",
+      body: JSON.stringify({ message_id: messageId, note }),
+    });
+  }
+
+  async removeFavorite(messageId: string): Promise<void> {
+    return this.request<void>(`/api/v1/favorites/${messageId}`, {
+      method: "DELETE",
+    });
+  }
+
+  async listFavorites(params?: {
+    collection_id?: string;
+    keyword?: string;
+    skip?: number;
+    limit?: number;
+  }): Promise<FavoriteListResponse> {
+    const qs = new URLSearchParams();
+    if (params?.collection_id) qs.set("collection_id", params.collection_id);
+    if (params?.keyword) qs.set("keyword", params.keyword);
+    if (params?.skip !== undefined) qs.set("skip", String(params.skip));
+    if (params?.limit !== undefined) qs.set("limit", String(params.limit));
+    const query = qs.toString();
+    return this.request<FavoriteListResponse>(
+      `/api/v1/favorites${query ? `?${query}` : ""}`
+    );
+  }
+
+  async updateFavoriteNote(messageId: string, note: string): Promise<void> {
+    return this.request<void>(`/api/v1/favorites/${messageId}/note`, {
+      method: "PUT",
+      body: JSON.stringify({ note }),
+    });
+  }
+
+  async checkFavorites(messageIds: string[]): Promise<Record<string, boolean>> {
+    if (messageIds.length === 0) return {};
+    return this.request<Record<string, boolean>>(
+      `/api/v1/favorites/check?message_ids=${messageIds.join(",")}`
+    );
   }
 }
 

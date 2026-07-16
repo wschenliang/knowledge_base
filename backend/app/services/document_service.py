@@ -91,28 +91,44 @@ class DocumentService:
         user: Optional[User] = None,
         skip: int = 0,
         limit: int = 100,
+        tag_names: Optional[list[str]] = None,
     ) -> tuple[list[Collection], int]:
         """列出知识库集合。
 
         - 传 ``user``：admin 看全部；普通用户仅看自己有 ACL 的
         - 不传 ``user``：旧行为，返回全部（保留向后兼容）
+        - ``tag_names``：按标签名称筛选（AND 逻辑）
         """
+        from app.models.document import Tag, CollectionTag
+
         if user:
             from app.services.permission_service import PermissionService
 
-            return await PermissionService().accessible_collections(user, db, skip, limit)
+            collections, total = await PermissionService().accessible_collections(user, db, skip, limit)
+        else:
+            total_result = await db.execute(select(func.count(Collection.id)))
+            total = total_result.scalar() or 0
 
-        total_result = await db.execute(select(func.count(Collection.id)))
-        total = total_result.scalar() or 0
+            result = await db.execute(
+                select(Collection)
+                .offset(skip)
+                .limit(limit)
+                .order_by(Collection.created_at.desc())
+            )
+            collections = list(result.scalars().all())
 
-        result = await db.execute(
-            select(Collection)
-            .offset(skip)
-            .limit(limit)
-            .order_by(Collection.created_at.desc())
-        )
-        collections = result.scalars().all()
-        return list(collections), total
+        # 标签筛选（AND 逻辑）
+        if tag_names:
+            filtered = []
+            for c in collections:
+                # 检查该知识库是否包含所有指定标签
+                c_tag_names = {t.name.lower() for t in c.tags}
+                if all(tn.lower() in c_tag_names for tn in tag_names):
+                    filtered.append(c)
+            collections = filtered
+            total = len(collections)
+
+        return collections, total
 
     async def upload_document(
         self,

@@ -156,5 +156,6 @@ function getPageTitle(pathname: string | null): string {
   if (pathname.startsWith("/knowledge-bases")) return "我的知识库";
   if (pathname.startsWith("/search")) return "语义搜索";
   if (pathname.startsWith("/chat")) return "智能问答";
+  if (pathname.startsWith("/favorites")) return "我的收藏";
   return "知识库";
 }

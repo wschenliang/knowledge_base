@@ -20,6 +20,7 @@ import {
   Lightbulb,
   CheckCircle2,
   Square as StopIcon,
+  Heart,
 } from "lucide-react";
 
 interface Props {
@@ -41,6 +42,7 @@ export default function ChatBox({
   const [useReranker, setUseReranker] = useState(true);
   const [expandedSources, setExpandedSources] = useState<Record<number, boolean>>({});
   const [showCollectionMenu, setShowCollectionMenu] = useState(false);
+  const [favorites, setFavorites] = useState<Record<string, boolean>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const convIdRef = useRef<string | null>(conversationId ?? null);
@@ -69,6 +71,14 @@ export default function ChatBox({
       const detail = (e as CustomEvent).detail;
       if (detail.messages) {
         setMessages(detail.messages);
+        // 从消息中提取收藏状态
+        const favs: Record<string, boolean> = {};
+        for (const msg of detail.messages) {
+          if (msg.id && msg.is_favorited) {
+            favs[msg.id] = true;
+          }
+        }
+        setFavorites(favs);
       }
       if (detail.collectionId) {
         setSelectedCollection(detail.collectionId);
@@ -78,6 +88,7 @@ export default function ChatBox({
       setMessages([]);
       setExpandedSources({});
       setSelectedCollection("");
+      setFavorites({});
     };
 
     window.addEventListener("load-conversation", handleLoad);
@@ -149,6 +160,23 @@ export default function ChatBox({
               }
               return updated;
             });
+            // 获取对话详情以拿到消息 ID 和收藏状态
+            if (event.conversation_id) {
+              api.getConversation(event.conversation_id).then((detail) => {
+                const favs: Record<string, boolean> = {};
+                for (const msg of detail.messages) {
+                  if (msg.id && msg.is_favorited) favs[msg.id] = true;
+                }
+                setFavorites(favs);
+                // 将消息 ID 同步到 messages state
+                setMessages((prev) =>
+                  prev.map((m, i) => ({
+                    ...m,
+                    id: detail.messages[i]?.id ?? m.id,
+                  }))
+                );
+              }).catch(() => {});
+            }
           } else if (event.type === "error") {
             setMessages((prev) => {
               const updated = [...prev];
@@ -198,6 +226,28 @@ export default function ChatBox({
 
   const toggleSources = (msgIndex: number) => {
     setExpandedSources((prev) => ({ ...prev, [msgIndex]: !prev[msgIndex] }));
+  };
+
+  const toggleFavorite = async (msgIndex: number) => {
+    const msg = messages[msgIndex];
+    if (!msg || msg.role !== "assistant" || !msg.id) return;
+    const msgId: string = msg.id;
+    const isFav = favorites[msgId];
+    try {
+      if (isFav) {
+        await api.removeFavorite(msgId);
+        setFavorites((prev) => {
+          const next = { ...prev };
+          delete next[msgId];
+          return next;
+        });
+      } else {
+        await api.addFavorite(msgId);
+        setFavorites((prev) => ({ ...prev, [msgId]: true }));
+      }
+    } catch {
+      // ignore
+    }
   };
 
   const selectedName =
@@ -277,6 +327,27 @@ export default function ChatBox({
                       {msg.content}
                     </p>
                   </div>
+
+                  {/* 操作栏：收藏按钮 */}
+                  {msg.role === "assistant" && msg.id && (
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <button
+                        onClick={() => toggleFavorite(i)}
+                        className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors ${
+                          favorites[msg.id]
+                            ? "text-rose-500 hover:bg-rose-50"
+                            : "text-slate-400 hover:text-rose-500 hover:bg-slate-50"
+                        }`}
+                        title={favorites[msg.id] ? "取消收藏" : "收藏"}
+                      >
+                        <Heart
+                          className="h-3.5 w-3.5"
+                          fill={favorites[msg.id] ? "currentColor" : "none"}
+                        />
+                        <span>{favorites[msg.id] ? "已收藏" : "收藏"}</span>
+                      </button>
+                    </div>
+                  )}
 
                   {/* 来源引用 */}
                   {msg.sources && msg.sources.length > 0 && (
