@@ -271,6 +271,9 @@ async def reset_password(
         )
 
     user.hashed_password = hash_password(request.new_password)
+    # 若该用户原本是 OAuth 注册（password_set=False），现在补设了密码，
+    # 必须把 password_set 置回 True，否则 login() 仍会拦截。
+    user.password_set = True
     await db.flush()
 
     await AuditService.log(
