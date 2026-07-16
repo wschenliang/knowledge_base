@@ -164,6 +164,8 @@ class User(Base):
     last_login_at: Mapped[Optional[datetime.datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # 该用户是否设过本地密码。OAuth 首次登入创建的账号为 False，可后续在个人设置中补设。
+    password_set: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # 关系
     collections: Mapped[list["Collection"]] = relationship(back_populates="owner")
