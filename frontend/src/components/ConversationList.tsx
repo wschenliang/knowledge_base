@@ -16,6 +16,8 @@ import {
   MessageSquare,
   PanelLeftClose,
   Heart,
+  ShieldCheck,
+  Users,
 } from "lucide-react";
 import UserMenu from "@/components/UserMenu";
 import ProfileDialog from "@/components/ProfileDialog";
@@ -38,6 +40,12 @@ const toolItems = [
   { href: "/search", label: "语义搜索", icon: Search },
   { href: "/chat", label: "智能问答", icon: Sparkles },
   { href: "/favorites", label: "我的收藏", icon: Heart },
+];
+
+/** 仅 admin 可见的导航项 */
+const adminToolItems = [
+  { href: "/admin/users", label: "用户管理", icon: Users },
+  { href: "/audit-logs", label: "审计日志", icon: ShieldCheck },
 ];
 
 export default function ChatSidebar({
@@ -165,6 +173,25 @@ export default function ChatSidebar({
               className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
                 isActive
                   ? "bg-slate-200/60 text-slate-900 font-medium"
+                  : "text-slate-600 hover:bg-slate-200/60"
+              }`}
+            >
+              <Icon className="h-4 w-4" strokeWidth={1.8} />
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
+        {/* Admin 专属导航 */}
+        {user?.role === "admin" && adminToolItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = pathname.startsWith(item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
+                isActive
+                  ? "bg-amber-100 text-amber-900 font-medium"
                   : "text-slate-600 hover:bg-slate-200/60"
               }`}
             >
