@@ -29,6 +29,11 @@ import type {
   TagListResponse,
   FavoriteItem,
   FavoriteListResponse,
+  UserListItem,
+  UserListResponse,
+  UserUpdateRequest,
+  UserDetailResponse,
+  UserStats,
 } from "@/types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -393,6 +398,9 @@ class ApiClient {
     if (params.action) qs.set("action", params.action);
     if (params.resource_type) qs.set("resource_type", params.resource_type);
     if (params.resource_id) qs.set("resource_id", params.resource_id);
+    if (params.start_time) qs.set("start_time", params.start_time);
+    if (params.end_time) qs.set("end_time", params.end_time);
+    if (params.keyword) qs.set("keyword", params.keyword);
     if (params.skip !== undefined) qs.set("skip", String(params.skip));
     if (params.limit !== undefined) qs.set("limit", String(params.limit));
     const query = qs.toString();
@@ -401,10 +409,94 @@ class ApiClient {
     );
   }
 
+  async exportAuditLogs(params: AuditLogQueryParams = {}): Promise<Blob> {
+    const qs = new URLSearchParams();
+    if (params.user_id) qs.set("user_id", params.user_id);
+    if (params.action) qs.set("action", params.action);
+    if (params.resource_type) qs.set("resource_type", params.resource_type);
+    if (params.resource_id) qs.set("resource_id", params.resource_id);
+    if (params.start_time) qs.set("start_time", params.start_time);
+    if (params.end_time) qs.set("end_time", params.end_time);
+    if (params.keyword) qs.set("keyword", params.keyword);
+    const query = qs.toString();
+
+    const headers: Record<string, string> = {};
+    if (this.token) {
+      headers["Authorization"] = `Bearer ${this.token}`;
+    }
+
+    const response = await fetch(
+      `${BASE_URL}/api/v1/admin/audit-logs/export${query ? `?${query}` : ""}`,
+      { headers },
+    );
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+    return response.blob();
+  }
+
   // ===== Dashboard =====
 
   async getDashboardStats(days: number = 7): Promise<DashboardStats> {
     return this.request<DashboardStats>(`/api/v1/dashboard/stats?days=${days}`);
+  }
+
+  // ===== 用户管理 (Admin) =====
+
+  async getUserStats(): Promise<UserStats> {
+    return this.request<UserStats>("/api/v1/admin/users/stats");
+  }
+
+  async listUsers(params: {
+    keyword?: string;
+    role?: string;
+    is_active?: boolean;
+    skip?: number;
+    limit?: number;
+  } = {}): Promise<UserListResponse> {
+    const qs = new URLSearchParams();
+    if (params.keyword) qs.set("keyword", params.keyword);
+    if (params.role) qs.set("role", params.role);
+    if (params.is_active !== undefined) qs.set("is_active", String(params.is_active));
+    if (params.skip !== undefined) qs.set("skip", String(params.skip));
+    if (params.limit !== undefined) qs.set("limit", String(params.limit));
+    const query = qs.toString();
+    return this.request<UserListResponse>(
+      `/api/v1/admin/users${query ? `?${query}` : ""}`
+    );
+  }
+
+  async getUserDetail(userId: string): Promise<UserDetailResponse> {
+    return this.request<UserDetailResponse>(`/api/v1/admin/users/${userId}`);
+  }
+
+  async updateUser(userId: string, data: UserUpdateRequest): Promise<UserDetailResponse> {
+    return this.request<UserDetailResponse>(`/api/v1/admin/users/${userId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async toggleUserStatus(userId: string): Promise<{ id: string; is_active: boolean; message: string }> {
+    return this.request<{ id: string; is_active: boolean; message: string }>(
+      `/api/v1/admin/users/${userId}/toggle-status`,
+      { method: "POST" }
+    );
+  }
+
+  async resetUserPassword(userId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(
+      `/api/v1/admin/users/${userId}/reset-password`,
+      { method: "POST" }
+    );
+  }
+
+  async resetPassword(token: string, new_password: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>("/api/v1/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ token, new_password }),
+    });
   }
 
   // ===== 收藏 =====
