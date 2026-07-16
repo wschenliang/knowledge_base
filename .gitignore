@@ -37,6 +37,9 @@ node_modules/
 .next/
 out/
 
+# Brainstorm 草图（visual companion）
+.superpowers/
+
 backend/_*.db
 backend/_diag_*.py
 
