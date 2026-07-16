@@ -8,7 +8,15 @@ interface AuthState {
   user: User | null;
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
-  register: (username: string, password: string, displayName?: string) => Promise<void>;
+  /**
+   * 邮箱 + 验证码注册。后端自动从 email 派生 username，display_name 默认同 username。
+   */
+  register: (input: {
+    email: string;
+    code: string;
+    password: string;
+    confirm_password: string;
+  }) => Promise<void>;
   /** OAuth 回调页使用：将后端下发的 JWT 托管到本地，并更新为已登入 */
   loginWithToken: (token: string) => Promise<void>;
   logout: () => void;
@@ -42,8 +50,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const register = useCallback(
-    async (username: string, password: string, displayName?: string) => {
-      await api.register(username, password, displayName);
+    async (input: {
+      email: string;
+      code: string;
+      password: string;
+      confirm_password: string;
+    }) => {
+      await api.register(input);
       const me = await api.getMe();
       setUser(me);
     },

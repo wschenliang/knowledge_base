@@ -97,13 +97,44 @@ class ApiClient {
   }
 
   // 认证
-  async register(username: string, password: string, displayName?: string): Promise<AuthTokens> {
+  /**
+   * 邮箱 + 验证码注册。后端自动从 email 派生 username，display_name 默认同 username。
+   */
+  async register(input: {
+    email: string;
+    code: string;
+    password: string;
+    confirm_password: string;
+  }): Promise<AuthTokens> {
     const result = await this.request<AuthTokens>("/api/v1/auth/register", {
       method: "POST",
-      body: JSON.stringify({ username, password, display_name: displayName }),
+      body: JSON.stringify(input),
     });
     this.setToken(result.access_token);
     return result;
+  }
+
+  /**
+   * 请求后端发送邮箱验证码。
+   * - sent=true 表示已发送
+   * - sent=false + cooldown_remaining_seconds > 0 表示仍在冷却
+   */
+  async sendVerificationCode(
+    email: string,
+    purpose: string = "register",
+  ): Promise<{
+    sent: boolean;
+    cooldown_remaining_seconds: number;
+    message: string;
+  }> {
+    return this.request<{
+      sent: boolean;
+      cooldown_remaining_seconds: number;
+      message: string;
+    }>("/api/v1/auth/send-verification-code", {
+      method: "POST",
+      body: JSON.stringify({ email, purpose }),
+    });
   }
 
   async login(username: string, password: string): Promise<AuthTokens> {

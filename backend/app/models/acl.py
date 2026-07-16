@@ -130,3 +130,40 @@ class OAuthAccount(Base):
             f"<OAuthAccount(user_id={self.user_id}, provider={self.provider}, "
             f"provider_user_id={self.provider_user_id})>"
         )
+
+
+class EmailVerificationCode(Base):
+    """邮箱验证码（注册 / 找回密码等场景使用）。
+
+    设计要点：
+    - 仅存哈希值（SHA-256 hex）。原始明文只出现在 Redis/邮件传输中，
+      数据库不持久化明文，即使数据库泄露也无法直接轰炸所有用户。
+    - 设有 `expires_at` 和 `consumed_at`，消费后即刻作废，避免重放。
+    - 60s 发送冷却由 API 层控制；表内多条记录通过 (email, created_at) 区分。
+    """
+
+    __tablename__ = "email_verification_codes"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    # 用途：register | reset_password | change_email
+    purpose: Mapped[str] = mapped_column(String(32), nullable=False, default="register")
+    expires_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    consumed_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("idx_email_purpose_time", "email", "purpose", "created_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<EmailVerificationCode(email={self.email}, purpose={self.purpose})>"

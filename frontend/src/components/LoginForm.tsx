@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
-import { Database, User, Lock, UserPlus, LogIn, Sparkles, BookOpen, Search, MessageSquare } from "lucide-react";
+import { Database, User, Lock, LogIn, Sparkles, BookOpen, Search, MessageSquare, Mail, ShieldCheck } from "lucide-react";
 import LegalDialog from "@/components/LegalDialog";
 import { PRIVACY_POLICY, TERMS_OF_SERVICE, type LegalDoc } from "@/lib/legal-content";
 
@@ -68,11 +68,18 @@ interface LoginFormProps {
 export default function LoginForm({ mode }: LoginFormProps) {
   const isRegister = mode === "register";
   const { login, register } = useAuth();
+  // 登录：使用 username；注册：使用 email。两者并存的目的是不改后端登录逻辑。
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
-  const [displayName, setDisplayName] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // 发送验证码冷却：倒计时秒数；0 表示可重新发送
+  const [codeCooldown, setCodeCooldown] = useState(0);
+  const [codeSending, setCodeSending] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
   // 控制法律协议弹窗的打开状态与当前展示的文档类型
   const [legalDocKey, setLegalDocKey] = useState<LegalDocKey | null>(null);
   // 后端已配置的 OAuth Provider 列表：仅在登录页加载，未配置则不显示 OAuth 区
@@ -104,10 +111,20 @@ export default function LoginForm({ mode }: LoginFormProps) {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
+    // 前端二次校验两次密码一致（给用户更即时反馈，避免到后端才报错）
+    if (isRegister && password !== confirmPassword) {
+      setError("两次输入的密码不一致");
+      return;
+    }
     setLoading(true);
     try {
       if (isRegister) {
-        await register(username, password, displayName || undefined);
+        await register({
+          email,
+          code,
+          password,
+          confirm_password: confirmPassword,
+        });
       } else {
         await login(username, password);
       }
@@ -117,6 +134,37 @@ export default function LoginForm({ mode }: LoginFormProps) {
       setLoading(false);
     }
   };
+
+  /** 发送邮箱验证码 */
+  const handleSendCode = async () => {
+    setError("");
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError("请先输入有效的邮箱地址");
+      return;
+    }
+    setCodeSending(true);
+    try {
+      const res = await api.sendVerificationCode(email, "register");
+      if (res.sent) {
+        setCodeSent(true);
+        setCodeCooldown(res.cooldown_remaining_seconds || 60);
+      } else if (res.cooldown_remaining_seconds > 0) {
+        setCodeCooldown(res.cooldown_remaining_seconds);
+        setError(res.message || "请稍后再试");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "发送验证码失败");
+    } finally {
+      setCodeSending(false);
+    }
+  };
+
+  // 倒计时自动递减
+  useEffect(() => {
+    if (codeCooldown <= 0) return;
+    const t = setTimeout(() => setCodeCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [codeCooldown]);
 
   return (
     <div className="flex min-h-screen bg-white">
@@ -213,41 +261,86 @@ export default function LoginForm({ mode }: LoginFormProps) {
               </div>
             )}
 
+            {/* 账号字段：登入页用 username，注册页用 email。两种模式分别有自己的 state。 */}
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-slate-700 mb-1.5">
-                用户名
+              <label
+                htmlFor={isRegister ? "email" : "username"}
+                className="block text-sm font-medium text-slate-700 mb-1.5"
+              >
+                {isRegister ? "邮箱地址" : "用户名"}
               </label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                {isRegister ? (
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                ) : (
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                )}
                 <input
-                  id="username"
-                  type="text"
+                  id={isRegister ? "email" : "username"}
+                  type={isRegister ? "email" : "text"}
                   required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  value={isRegister ? email : username}
+                  onChange={(e) =>
+                    isRegister
+                      ? setEmail(e.target.value)
+                      : setUsername(e.target.value)
+                  }
                   className="block w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all outline-none"
-                  placeholder="输入用户名"
+                  placeholder={isRegister ? "your@example.com" : "输入用户名"}
+                  autoComplete={isRegister ? "email" : "username"}
                 />
               </div>
             </div>
 
             {isRegister && (
-              <div className="animate-slide-up">
-                <label htmlFor="displayName" className="block text-sm font-medium text-slate-700 mb-1.5">
-                  显示名称
-                </label>
-                <div className="relative">
-                  <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <input
-                    id="displayName"
-                    type="text"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    className="block w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all outline-none"
-                    placeholder="可选"
-                  />
+              <>
+                {/* 验证码输入框 + 发送按钮 */}
+                <div className="animate-slide-up">
+                  <label
+                    htmlFor="code"
+                    className="block text-sm font-medium text-slate-700 mb-1.5"
+                  >
+                    邮箱验证码
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                      <input
+                        id="code"
+                        type="text"
+                        inputMode="numeric"
+                        pattern="\d{6}"
+                        maxLength={6}
+                        required
+                        value={code}
+                        onChange={(e) =>
+                          setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                        }
+                        className="block w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all outline-none tracking-widest"
+                        placeholder="6 位数字验证码"
+                        autoComplete="one-time-code"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSendCode}
+                      disabled={codeSending || codeCooldown > 0}
+                      className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white transition-all whitespace-nowrap"
+                    >
+                      {codeSending
+                        ? "发送中..."
+                        : codeCooldown > 0
+                          ? `${codeCooldown}s 后重发`
+                          : codeSent
+                            ? "重新发送"
+                            : "发送验证码"}
+                    </button>
+                  </div>
+                  <p className="mt-1.5 text-xs text-slate-500">
+                    验证码 10 分钟内有效；同一邮箱 60 秒只能发送一次。
+                  </p>
                 </div>
-              </div>
+              </>
             )}
 
             <div>
@@ -264,9 +357,41 @@ export default function LoginForm({ mode }: LoginFormProps) {
                   onChange={(e) => setPassword(e.target.value)}
                   className="block w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all outline-none"
                   placeholder="输入密码"
+                  autoComplete={isRegister ? "new-password" : "current-password"}
                 />
               </div>
             </div>
+
+            {isRegister && (
+              <div className="animate-slide-up">
+                <label
+                  htmlFor="confirmPassword"
+                  className="block text-sm font-medium text-slate-700 mb-1.5"
+                >
+                  确认密码
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    id="confirmPassword"
+                    type="password"
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className={`block w-full rounded-xl border bg-white pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:ring-2 transition-all outline-none ${
+                      confirmPassword && confirmPassword !== password
+                        ? "border-red-300 focus:border-red-500 focus:ring-red-500/10"
+                        : "border-slate-200 focus:border-blue-500 focus:ring-blue-500/10"
+                    }`}
+                    placeholder="再输入一次密码"
+                    autoComplete="new-password"
+                  />
+                </div>
+                {confirmPassword && confirmPassword !== password && (
+                  <p className="mt-1.5 text-xs text-red-600">两次密码不一致</p>
+                )}
+              </div>
+            )}
 
             {/* 主按钮 — 与 ChatGPT 风格一致采用 slate-900 实色，而非蓝紫渐变 */}
             <button
