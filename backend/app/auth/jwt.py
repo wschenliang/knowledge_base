@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -21,6 +21,7 @@ from app.auth import (
 )
 from app.models.database import get_db
 from app.models.document import User
+from app.services.audit_service import AuditService
 
 router = APIRouter(prefix="/api/v1/auth", tags=["认证"])
 security = HTTPBearer()
@@ -83,7 +84,7 @@ async def get_current_user(
 
 
 @router.post("/register", response_model=TokenResponse)
-async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(request: RegisterRequest, req: Request, db: AsyncSession = Depends(get_db)):
     """注册新用户"""
     logger.info(f"收到注册请求: username={request.username}")
     try:
@@ -118,6 +119,18 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
 
         logger.info(f"用户注册成功: id={user.id}, username={user.username}")
 
+        # 审计日志
+        await AuditService.log(
+            db=db,
+            user_id=user.id,
+            action="auth.register",
+            resource_type="user",
+            resource_id=user.id,
+            detail={"username": user.username},
+            request=req,
+        )
+        await db.commit()
+
         token = create_access_token(
             user_id=user.id,
             username=user.username,
@@ -143,7 +156,7 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(request: LoginRequest, req: Request, db: AsyncSession = Depends(get_db)):
     """用户登录"""
     logger.info(f"收到登录请求: username={request.username}")
     try:
@@ -164,6 +177,9 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
                 detail="用户已被禁用",
             )
 
+        user.last_login_at = datetime.datetime.now(datetime.timezone.utc)
+        await db.flush()
+
         token = create_access_token(
             user_id=user.id,
             username=user.username,
@@ -171,6 +187,18 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
         )
 
         logger.info(f"用户登录成功: id={user.id}, username={user.username}")
+
+        # 审计日志
+        await AuditService.log(
+            db=db,
+            user_id=user.id,
+            action="auth.login",
+            resource_type="user",
+            resource_id=user.id,
+            detail={"username": user.username},
+            request=req,
+        )
+        await db.commit()
 
         return TokenResponse(
             access_token=token,
