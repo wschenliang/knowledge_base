@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { Collection, SearchResult } from "@/types";
+import type { Collection, SearchFacetsResponse, SearchFilters, SearchResult } from "@/types";
 import SourceCard from "./SourceCard";
-import { Search, Database, Sparkles, FileSearch } from "lucide-react";
+import AdvancedFilterPanel from "./AdvancedFilterPanel";
+import { Search, Database, Sparkles, FileSearch, SlidersHorizontal, X } from "lucide-react";
 
 interface Props {
   collections: Collection[];
@@ -18,6 +19,60 @@ export default function SearchBox({ collections }: Props) {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
+  // 筛选：编辑中 / 已应用 两套状态
+  const [appliedFilters, setAppliedFilters] = useState<SearchFilters>({});
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [facets, setFacets] = useState<SearchFacetsResponse | null>(null);
+  const [facetsLoading, setFacetsLoading] = useState(false);
+
+  // 切换 KB 时加载 facet（按 collection_id 缓存到 localStorage 5 分钟）
+  // setFacets(null) 由 onChange 同步触发，避免 useEffect 内同步 setState
+  useEffect(() => {
+    if (!selectedCollection) {
+      return;
+    }
+    const cacheKey = `search_facets_${selectedCollection}`;
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { ts, data } = JSON.parse(cached);
+        if (Date.now() - ts < 5 * 60 * 1000) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setFacets(data);
+          return;
+        }
+      }
+    } catch {
+      // localStorage 解析失败忽略
+    }
+
+    let cancelled = false;
+    setFacetsLoading(true);
+    api
+      .getSearchFacets(selectedCollection)
+      .then((data) => {
+        if (cancelled) return;
+        setFacets(data);
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data }));
+        } catch {
+          // quota 等忽略
+        }
+      })
+      .catch((err) => {
+        console.error("facets load failed:", err);
+        if (cancelled) return;
+        setFacets({ uploaders: [], tags: [], file_types: [] });
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setFacetsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCollection]);
+
   const handleSearch = async () => {
     if (!query.trim() || !selectedCollection) return;
 
@@ -28,6 +83,7 @@ export default function SearchBox({ collections }: Props) {
         query: query.trim(),
         collection_id: selectedCollection,
         use_reranker: useReranker,
+        filters: appliedFilters,
       });
       setResults(response.results);
     } catch (err) {
@@ -45,6 +101,12 @@ export default function SearchBox({ collections }: Props) {
     }
   };
 
+  const appliedCount =
+    (appliedFilters.file_types?.length || 0) +
+    (appliedFilters.uploader_ids?.length || 0) +
+    (appliedFilters.tag_ids?.length || 0) +
+    (appliedFilters.filename_contains ? 1 : 0);
+
   return (
     <div className="flex h-full flex-col gap-4">
       {/* 搜索控制区 */}
@@ -54,7 +116,10 @@ export default function SearchBox({ collections }: Props) {
             <Database className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <select
               value={selectedCollection}
-              onChange={(e) => setSelectedCollection(e.target.value)}
+              onChange={(e) => {
+                setSelectedCollection(e.target.value);
+                setFacets(null); // 切换 KB 时同步清空旧 facets
+              }}
               className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-8 py-2.5 text-sm text-slate-700 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 focus:bg-white outline-none transition-all"
             >
               <option value="">选择知识库...</option>
@@ -73,6 +138,22 @@ export default function SearchBox({ collections }: Props) {
             <Sparkles className="h-3.5 w-3.5 text-amber-500" />
             重排序
           </label>
+          {/* 高级筛选按钮 */}
+          <button
+            onClick={() => setDrawerOpen(true)}
+            disabled={!selectedCollection}
+            className={`flex items-center gap-1.5 rounded-xl border px-3 py-2.5 text-sm transition-colors ${
+              appliedCount > 0
+                ? "border-blue-500 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            高级
+            {appliedCount > 0 && (
+              <span className="text-[11px] font-semibold">{appliedCount}</span>
+            )}
+          </button>
         </div>
 
         {/* 搜索框 */}
@@ -98,6 +179,38 @@ export default function SearchBox({ collections }: Props) {
             {loading ? "搜索中..." : "搜索"}
           </button>
         </div>
+
+        {/* 已应用筛选摘要 */}
+        {appliedCount > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+            <span className="text-slate-400">已应用筛选：</span>
+            {(appliedFilters.file_types || []).map((ft) => (
+              <span key={`ft-${ft}`} className="rounded-full bg-slate-100 px-2 py-0.5">{ft}</span>
+            ))}
+            {(appliedFilters.uploader_ids || []).map((id) => {
+              const label = facets?.uploaders.find((u) => u.value === id)?.label || id;
+              return (
+                <span key={`u-${id}`} className="rounded-full bg-slate-100 px-2 py-0.5">@{label}</span>
+              );
+            })}
+            {(appliedFilters.tag_ids || []).map((id) => {
+              const label = facets?.tags.find((t) => t.value === id)?.label || id;
+              return (
+                <span key={`t-${id}`} className="rounded-full bg-slate-100 px-2 py-0.5">#{label}</span>
+              );
+            })}
+            {appliedFilters.filename_contains && (
+              <span className="rounded-full bg-slate-100 px-2 py-0.5">包含 &quot;{appliedFilters.filename_contains}&quot;</span>
+            )}
+            <button
+              onClick={() => setAppliedFilters({})}
+              className="ml-1 flex items-center gap-0.5 text-slate-400 hover:text-slate-700"
+            >
+              <X className="h-3 w-3" />
+              清空
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 搜索结果 */}
@@ -117,7 +230,7 @@ export default function SearchBox({ collections }: Props) {
                 <FileSearch className="h-6 w-6 text-slate-400" />
               </div>
               <p className="text-sm font-medium text-slate-700">未找到相关结果</p>
-              <p className="mt-1 text-xs text-slate-400">尝试使用不同的关键词搜索</p>
+              <p className="mt-1 text-xs text-slate-400">尝试使用不同的关键词或调整筛选条件</p>
             </div>
           ) : (
             <div className="space-y-3 animate-fade-in">
@@ -135,6 +248,9 @@ export default function SearchBox({ collections }: Props) {
                     source: result.source,
                     text: result.text,
                     score: result.score,
+                    file_type: result.file_type,
+                    uploader_username: result.uploader_username,
+                    highlight_terms: result.highlight_terms ?? [],
                   }}
                 />
               ))}
@@ -147,9 +263,22 @@ export default function SearchBox({ collections }: Props) {
             </div>
             <p className="text-sm font-medium text-slate-600">输入搜索词开始检索</p>
             <p className="mt-1 text-xs text-slate-400">基于向量相似度匹配知识库中的文档片段</p>
+            {facetsLoading && (
+              <p className="mt-3 text-xs text-slate-400">加载可选筛选维度...</p>
+            )}
           </div>
         )}
       </div>
+
+      {/* 抽屉式高级筛选 */}
+      <AdvancedFilterPanel
+        open={drawerOpen}
+        facets={facets}
+        initialFilters={appliedFilters}
+        appliedCount={appliedCount}
+        onApply={(next) => setAppliedFilters(next)}
+        onClose={() => setDrawerOpen(false)}
+      />
     </div>
   );
 }
