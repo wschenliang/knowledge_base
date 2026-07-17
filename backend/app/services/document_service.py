@@ -136,7 +136,8 @@ class DocumentService:
         filename: str,
         file_content: bytes,
         file_type: str,
-        db: AsyncSession,
+        uploader_id: Optional[str] = None,
+        db: Optional[AsyncSession] = None,
     ) -> Document:
         """上传文档"""
         # 存储文件到 MinIO (如果可用)
@@ -164,6 +165,7 @@ class DocumentService:
             file_type=file_type,
             file_size=len(file_content),
             status="pending",
+            uploader_id=uploader_id,
         )
 
         db.add(document)

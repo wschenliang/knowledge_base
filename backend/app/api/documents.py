@@ -63,13 +63,14 @@ async def upload_document(
         filename=file.filename,
         file_content=file_content,
         file_type=get_file_type(file.filename),
+        uploader_id=current_user.id,
         db=db,
     )
 
     # 异步索引到 RAG 引擎 (简化版: 直接同步索引)
     try:
         from app.config import settings
-        from app.models.document import Collection
+        from app.models.document import Collection, Tag, CollectionTag
         from sqlalchemy import select
 
         # 获取 collection 信息
@@ -88,6 +89,17 @@ async def upload_document(
 
             try:
                 rag_engine = get_rag_engine()
+
+                # 取出当前 KB 的标签（写入时快照到 Qdrant payload）
+                tag_rows = await db.execute(
+                    select(Tag)
+                    .join(CollectionTag, Tag.id == CollectionTag.tag_id)
+                    .where(CollectionTag.collection_id == collection_id)
+                )
+                tag_objs = list(tag_rows.scalars().all())
+                tag_ids = [t.id for t in tag_objs]
+                tag_names = [t.name for t in tag_objs]
+
                 chunk_count = await rag_engine.index_document(
                     file_path=tmp_path,
                     collection_name=collection.qdrant_collection,
@@ -96,6 +108,10 @@ async def upload_document(
                         "file_type": get_file_type(file.filename),
                         "collection_id": collection_id,
                         "document_id": document.id,
+                        "uploader_id": current_user.id or "",
+                        "uploader_username": current_user.username or "",
+                        "tag_ids": tag_ids,
+                        "tag_names": tag_names,
                     },
                 )
 

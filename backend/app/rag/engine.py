@@ -191,6 +191,13 @@ class RAGEngine:
                 "filename": metadata.get("filename", os.path.basename(file_path)),
                 "file_path": file_path,
                 "file_type": metadata.get("file_type", doc_meta.get("format", "")),
+                # 写入时一次性快照到 Qdrant payload（避免跨集合 join）
+                "document_id": metadata.get("document_id", ""),
+                "collection_id": metadata.get("collection_id", ""),
+                "uploader_id": metadata.get("uploader_id", ""),
+                "uploader_username": metadata.get("uploader_username", ""),
+                "tag_ids": metadata.get("tag_ids", []),
+                "tag_names": metadata.get("tag_names", []),
             }
             # 合并文档元数据
             if doc_meta:
