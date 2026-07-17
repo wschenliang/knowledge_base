@@ -320,6 +320,73 @@ class ChatService:
         """将字典序列化为 SSE data 行"""
         return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
+    async def get_search_facets(
+        self,
+        collection_id: str,
+        db: AsyncSession,
+    ) -> dict:
+        """获取当前 KB 的可选筛选维度（uploaders / tags / file_types）。"""
+        from sqlalchemy import func, select
+        from app.models.document import Document, User, Tag, CollectionTag
+
+        # ===== Uploaders =====
+        # 当前 KB 中所有非空上传者，按文档数倒序
+        uploader_rows = await db.execute(
+            select(
+                User.id,
+                User.username,
+                func.count(Document.id).label("cnt"),
+            )
+            .join(Document, Document.uploader_id == User.id)
+            .where(Document.collection_id == collection_id)
+            .group_by(User.id, User.username)
+            .order_by(func.count(Document.id).desc())
+        )
+        uploaders = [
+            {"value": uid, "label": uname, "count": cnt}
+            for uid, uname, cnt in uploader_rows.all()
+        ]
+
+        # ===== Tags =====
+        tag_rows = await db.execute(
+            select(Tag.id, Tag.name, func.count(CollectionTag.collection_id).label("cnt"))
+            .join(CollectionTag, CollectionTag.tag_id == Tag.id)
+            .where(CollectionTag.collection_id == collection_id)
+            .group_by(Tag.id, Tag.name)
+            .order_by(func.count(CollectionTag.collection_id).desc(), Tag.name)
+        )
+        tags = [
+            {"value": tid, "label": tname, "count": cnt}
+            for tid, tname, cnt in tag_rows.all()
+        ]
+
+        # ===== File Types =====
+        ft_rows = await db.execute(
+            select(Document.file_type, func.count(Document.id).label("cnt"))
+            .where(Document.collection_id == collection_id)
+            .group_by(Document.file_type)
+            .order_by(func.count(Document.id).desc())
+        )
+        type_label_map = {
+            "pdf": "PDF",
+            "docx": "Word",
+            "doc": "Word",
+            "md": "Markdown",
+            "txt": "Text",
+            "xlsx": "Excel",
+            "xls": "Excel",
+            "pptx": "PowerPoint",
+            "ppt": "PowerPoint",
+            "html": "HTML",
+            "csv": "CSV",
+        }
+        file_types = [
+            {"value": ft, "label": type_label_map.get(ft, ft.upper()), "count": cnt}
+            for ft, cnt in ft_rows.all()
+        ]
+
+        return {"uploaders": uploaders, "tags": tags, "file_types": file_types}
+
     async def search(
         self,
         query: str,
