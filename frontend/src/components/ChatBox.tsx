@@ -4,6 +4,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import type { ChatMessage, Collection, StreamEvent } from "@/types";
 import SourceCard from "./SourceCard";
+import HighlightedText from "./HighlightedText";
+import type { SearchFilters } from "@/types";
 import {
   Send,
   Bot,
@@ -113,6 +115,10 @@ export default function ChatBox({
     const controller = new AbortController();
     abortRef.current = controller;
 
+    // 本期不引入 ChatBox 内的筛选入口（仅在 /search 抽屉中可用）；
+    // ChatBox 仍透传 filters（如未来扩展"高级筛选"图标，可在此组装）
+    const filters: SearchFilters | undefined = undefined;
+
     try {
       await api.chatStream(
         {
@@ -120,6 +126,7 @@ export default function ChatBox({
           collection_id: selectedCollection,
           conversation_id: convIdRef.current ?? undefined,
           use_reranker: useReranker,
+          filters,
         },
         (event: StreamEvent) => {
           if (event.type === "token") {
@@ -324,7 +331,10 @@ export default function ChatBox({
                     }`}
                   >
                     <p className="text-[15px] whitespace-pre-wrap leading-relaxed">
-                      {msg.content}
+                      <HighlightedText
+                        text={msg.content}
+                        terms={msg.sources?.[0]?.highlight_terms ?? []}
+                      />
                     </p>
                   </div>
 
