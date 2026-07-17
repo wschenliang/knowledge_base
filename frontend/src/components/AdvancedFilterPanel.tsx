@@ -45,7 +45,10 @@ export default function AdvancedFilterPanel({
 
   // 打开时把 initialFilters 拷贝到 draft
   useEffect(() => {
-    if (open) setDraft(initialFilters);
+    if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setDraft(initialFilters);
+    }
   }, [open, initialFilters]);
 
   useEffect(() => {
