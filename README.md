@@ -391,6 +391,28 @@ docker-compose -f docker-compose.prod.yml down
 | Prometheus | — | `http://localhost:9090` |
 | Grafana | — | `http://localhost:3001` |
 
+### 数据库迁移（v6 搜索结果增强）
+
+v6 迁移为 `documents` 表新增 `uploader_id` 字段，以支持搜索结果按"上传者"筛选、引用来源展示上传者信息。
+
+**部署后端后执行**：
+
+```bash
+cd backend
+# Windows
+.venv\Scripts\python scripts/migrate_v6_uploader.py
+# Linux / macOS
+source .venv/bin/activate && python scripts/migrate_v6_uploader.py
+```
+
+迁移特性：
+
+- **幂等**：重复运行不会重复添加列 / 索引 / 外键
+- **可回滚**：`python scripts/migrate_v6_uploader.py --rollback`
+- **向后兼容**：旧 chunks 缺 `uploader_id` 字段时，前端展示"未知作者"且不报错
+
+旧部署请在升级代码后**先执行迁移**再上传新文档；否则新上传的文档无法关联用户。
+
 ### 安全清单（生产部署前必查）
 
 - [ ] 将 `.env` 中所有默认密码更换为强密码
