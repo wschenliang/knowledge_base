@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 from typing import Optional
 
 from qdrant_client import QdrantClient
@@ -296,3 +297,78 @@ class HybridRetriever:
             return fused
         else:
             return vector_results[:top_k]
+
+    # ===== 命中词提取 =====
+
+    # 粗切 query 用的标点正则（空白 + 中英文标点）
+    _QUERY_SPLIT_RE = re.compile(r"[\s,。;；、]+")
+
+    @staticmethod
+    def _normalize_term(term: str) -> str:
+        """归一化：去首尾空白、跳过过短项。"""
+        t = term.strip()
+        if len(t) < 2:
+            return ""
+        return t
+
+    def get_query_highlight_terms(
+        self,
+        query_text: str,
+        top_results: list[dict],
+        max_terms: int = 8,
+    ) -> list[str]:
+        """从 BM25 命中片段提取实际出现过的 query 关键词，供前端高亮。
+
+        算法：
+        1. 过滤 query_text 为空 / top_results 为空的边界；
+        2. 以空白 + 中英文标点粗切 query（不上 jieba）；
+        3. 逐 chunk 命中：term.lower() in chunk.text.lower()；
+        4. 去重 + 按“出现在多少 chunk”频次降序；
+        5. 截断到 max_terms；
+        6. 完整短语优先保留到结果首位。
+        """
+        if not query_text or not query_text.strip():
+            return []
+        if not top_results:
+            return []
+
+        raw_terms = self._QUERY_SPLIT_RE.split(query_text)
+        terms = [self._normalize_term(t) for t in raw_terms]
+        terms = [t for t in terms if t]
+
+        # 完整短语（如 "运维指标"）仅当 query 不含粗切字符时启用首位
+        # 避免 "单字 a" 这种含空格/标点的 query 被错误地整体当成一个 term
+        full_phrase = query_text.strip()
+        phrase_first = False
+        if (
+            full_phrase
+            and full_phrase not in terms
+            and len(full_phrase) >= 2
+            and not self._QUERY_SPLIT_RE.search(full_phrase)
+            and any(
+                full_phrase.lower() in (r.get("text", "") or "").lower()
+                for r in top_results
+            )
+        ):
+            phrase_first = True
+
+        chunk_texts = [(r.get("text", "") or "").lower() for r in top_results]
+
+        # 频次 = 该 term 出现在多少个 chunk 的 text 里
+        freq: dict[str, int] = {}
+        for term in terms:
+            t_low = term.lower()
+            count = sum(1 for ct in chunk_texts if t_low in ct)
+            if count > 0:
+                freq[term] = count
+
+        # 按频次降序，再按 term 长度降序，最后按字典序稳定排序
+        ranked = sorted(freq.items(), key=lambda kv: (-kv[1], -len(kv[0]), kv[0]))
+        result = [term for term, _ in ranked[:max_terms]]
+
+        if phrase_first and full_phrase not in result:
+            result.insert(0, full_phrase)
+            # 超长则截断末尾
+            result = result[:max_terms]
+
+        return result
