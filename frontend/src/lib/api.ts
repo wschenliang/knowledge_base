@@ -9,6 +9,7 @@ import type {
   ChatRequest,
   SearchResponse,
   SearchRequest,
+  SearchFacetsResponse,
   User,
   StreamEvent,
   ConversationListResponse,
@@ -309,6 +310,13 @@ class ApiClient {
       method: "POST",
       body: JSON.stringify(request),
     });
+  }
+
+  // 获取搜索筛选面板的可选维度（uploaders / tags / file_types）
+  async getSearchFacets(collectionId: string): Promise<SearchFacetsResponse> {
+    return this.request<SearchFacetsResponse>(
+      `/api/v1/search/facets?collection_id=${encodeURIComponent(collectionId)}`,
+    );
   }
 
   // 流式问答 (SSE)

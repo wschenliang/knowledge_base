@@ -78,11 +78,37 @@ export interface ChatMessage {
   is_favorited?: boolean;
 }
 
+// ===== 高级搜索过滤 =====
+
+export interface SearchFilters {
+  file_types?: string[];
+  uploader_ids?: string[];
+  tag_ids?: string[];
+  filename_contains?: string;
+}
+
+export interface FacetOption {
+  value: string;
+  label: string;
+  count: number;
+}
+
+export interface SearchFacetsResponse {
+  uploaders: FacetOption[];
+  tags: FacetOption[];
+  file_types: FacetOption[];
+}
+
 export interface SourceItem {
   index: number;
   source: string;
   text: string;
   score: number;
+  file_type?: string | null;
+  uploader_username?: string | null;
+  document_id?: string | null;
+  tag_ids?: string[];
+  highlight_terms?: string[];
 }
 
 export interface ChatRequest {
@@ -91,6 +117,7 @@ export interface ChatRequest {
   conversation_id?: string;
   top_k?: number;
   use_reranker?: boolean;
+  filters?: SearchFilters;
 }
 
 export interface ChatResponse {
@@ -104,6 +131,7 @@ export interface SearchRequest {
   collection_id: string;
   top_k?: number;
   use_reranker?: boolean;
+  filters?: SearchFilters;
 }
 
 export interface SearchResult {
@@ -111,12 +139,18 @@ export interface SearchResult {
   source: string;
   text: string;
   score: number;
+  file_type?: string | null;
+  uploader_username?: string | null;
+  document_id?: string | null;
+  tag_ids?: string[];
+  highlight_terms?: string[];
 }
 
 export interface SearchResponse {
   query: string;
   results: SearchResult[];
   total: number;
+  applied_filters?: SearchFilters | null;
 }
 
 // SSE 流式事件
