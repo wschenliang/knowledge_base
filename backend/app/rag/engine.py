@@ -305,14 +305,16 @@ class RAGEngine:
         Returns:
             包含 answer 和 sources 的字典
         """
-        # 1. 检索相关文档
-        retrieved_docs = await self.search(
+        # 1. 检索相关文档（含 highlight_terms）
+        engine_search = await self.search(
             query=query,
             collection_name=collection_name,
             top_k=top_k,
             filter_condition=filter_condition,
             use_reranker=use_reranker,
         )
+        retrieved_docs = engine_search["results"]
+        highlight_terms = engine_search["highlight_terms"]
 
         # 2. 生成答案
         result = await self.synthesizer.synthesize(
@@ -321,7 +323,8 @@ class RAGEngine:
             chat_history=chat_history,
         )
 
-        return result
+        # 合并 highlight_terms 到返回结果（供调用方注入 sources）
+        return {**result, "highlight_terms": highlight_terms}
 
     async def delete_document(
         self,

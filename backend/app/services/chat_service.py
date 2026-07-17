@@ -140,7 +140,7 @@ class ChatService:
         # 构造 filter_condition
         filter_condition = self._build_filter_condition(collection_id, filters, db)
 
-        # 执行 RAG
+        # 执行 RAG（query 内部已合并 highlight_terms）
         result = await self.rag_engine.query(
             query=query,
             collection_name=collection.qdrant_collection,
@@ -150,20 +150,12 @@ class ChatService:
             use_reranker=use_reranker,
         )
 
-        # 把 highlight_terms 注入每条 source
-        engine_search = await self.rag_engine.search(
-            query=query,
-            collection_name=collection.qdrant_collection,
-            top_k=top_k,
-            filter_condition=filter_condition,
-            use_reranker=use_reranker,
-        )
-        highlight_terms = engine_search["highlight_terms"]
-        sources_with_terms = []
-        for s in result.get("sources", []):
-            new_s = dict(s)
-            new_s["highlight_terms"] = highlight_terms
-            sources_with_terms.append(new_s)
+        # 提取 highlight_terms 并注入每条 source（避免二次检索）
+        highlight_terms = result.pop("highlight_terms", [])
+        sources_with_terms = [
+            {**s, "highlight_terms": highlight_terms}
+            for s in result.get("sources", [])
+        ]
 
         # 保存助手回复
         if db:
@@ -285,6 +277,7 @@ class ChatService:
         ]
 
         # ========== 阶段 4：保存助手回复、更新对话元数据、提交 ==========
+        save_ok = True
         try:
             await self._save_message(
                 conversation.id,
@@ -293,7 +286,9 @@ class ChatService:
                 sources=sources_with_terms,
                 db=db,
             )
-            # commit 后 conversation 已 detached，需重新 add 才能更新属性
+            # _save_message 内部已 db.flush() 把 assistant message 写入 session。
+            # 在 commit 前更新 conversation 字段；commit 后靠 expire_on_commit=False
+            # 保持属性可用，db.add() 对已在 session 的对象为 no-op。
             db.add(conversation)
             conversation.message_count += 2
             if conversation.title == "新对话":
@@ -305,15 +300,22 @@ class ChatService:
                 await db.rollback()
             except Exception:
                 pass
+            save_ok = False
+            # 通知客户端保存失败，避免前端误认为会话已成功持久化
+            yield self._sse_event(
+                {"type": "error", "content": f"保存消息失败: {e}"}
+            )
+            return
 
-        yield self._sse_event(
-            {
-                "type": "done",
-                "answer": full_answer,
-                "sources": sources_with_terms,
-                "conversation_id": conversation.id,
-            }
-        )
+        if save_ok:
+            yield self._sse_event(
+                {
+                    "type": "done",
+                    "answer": full_answer,
+                    "sources": sources_with_terms,
+                    "conversation_id": conversation.id,
+                }
+            )
 
     @staticmethod
     def _sse_event(data: dict) -> str:
@@ -483,10 +485,12 @@ class ChatService:
             )
 
         if filters.get("filename_contains"):
+            # 使用 MatchPhrase 做整段子串匹配（Qdrant 1.7+），而非分词 token 匹配，
+            # 与 "filename LIKE %x%" 的语义一致
             must.append(
                 models.FieldCondition(
                     key="filename",
-                    match=models.MatchText(text=filters["filename_contains"]),
+                    match=models.MatchPhrase(phrase=filters["filename_contains"]),
                 )
             )
 
