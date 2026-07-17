@@ -2,10 +2,58 @@
 
 import { useState } from "react";
 import type { SourceItem } from "@/types";
-import { FileText, ChevronDown, ChevronUp } from "lucide-react";
+import HighlightedText from "./HighlightedText";
+import {
+  FileText,
+  FileType,
+  ChevronDown,
+  ChevronUp,
+  User,
+} from "lucide-react";
 
 interface Props {
   source: SourceItem;
+}
+
+/** 文件类型展示标签（与 AdvancedFilterPanel 保持一致） */
+const FILE_TYPE_LABEL: Record<string, string> = {
+  pdf: "PDF",
+  docx: "Word",
+  doc: "Word",
+  md: "Markdown",
+  txt: "Text",
+  xlsx: "Excel",
+  xls: "Excel",
+  pptx: "PowerPoint",
+  ppt: "PowerPoint",
+  html: "HTML",
+  csv: "CSV",
+};
+
+/** 根据文件类型返回 chip 颜色 */
+function fileTypeChipClass(fileType?: string | null): string {
+  switch (fileType) {
+    case "pdf":
+      return "bg-red-50 text-red-700 border-red-200";
+    case "docx":
+    case "doc":
+      return "bg-blue-50 text-blue-700 border-blue-200";
+    case "xlsx":
+    case "xls":
+      return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    case "pptx":
+    case "ppt":
+      return "bg-amber-50 text-amber-700 border-amber-200";
+    case "md":
+      return "bg-violet-50 text-violet-700 border-violet-200";
+    case "txt":
+    case "csv":
+      return "bg-slate-50 text-slate-700 border-slate-200";
+    case "html":
+      return "bg-orange-50 text-orange-700 border-orange-200";
+    default:
+      return "bg-slate-50 text-slate-600 border-slate-200";
+  }
 }
 
 export default function SourceCard({ source }: Props) {
@@ -26,6 +74,8 @@ export default function SourceCard({ source }: Props) {
     if (score >= 0.4) return "border-l-amber-500";
     return "border-l-slate-400";
   };
+
+  const highlightTerms = source.highlight_terms ?? [];
 
   return (
     <div className={`rounded-xl border border-slate-200 bg-white border-l-[3px] ${getBorderColor(source.score)} shadow-sm overflow-hidden transition-all hover:shadow-md`}>
@@ -55,11 +105,35 @@ export default function SourceCard({ source }: Props) {
           </div>
         </div>
 
-        {/* 文本内容 */}
+        {/* 元信息行：文件类型 + 上传者 */}
+        {(source.file_type || source.uploader_username) && (
+          <div className="flex items-center gap-2 mb-2.5 flex-wrap">
+            {source.file_type && (
+              <span
+                className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${fileTypeChipClass(source.file_type)}`}
+                title={`文件类型: ${source.file_type}`}
+              >
+                <FileType className="h-3 w-3" />
+                {FILE_TYPE_LABEL[source.file_type] || source.file_type.toUpperCase()}
+              </span>
+            )}
+            {source.uploader_username && (
+              <span
+                className="inline-flex items-center gap-1 text-[11px] text-slate-500"
+                title={`上传者: ${source.uploader_username}`}
+              >
+                <User className="h-3 w-3" />
+                {source.uploader_username}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* 文本内容（BM25 命中词高亮） */}
         <div className="relative">
-          <p className={`text-sm text-slate-700 leading-relaxed ${expanded ? "" : "line-clamp-3"}`}>
-            {source.text}
-          </p>
+          <div className={`text-sm text-slate-700 leading-relaxed ${expanded ? "" : "line-clamp-3"}`}>
+            <HighlightedText text={source.text} terms={highlightTerms} />
+          </div>
           {source.text.length > 150 && (
             <button
               onClick={() => setExpanded(!expanded)}
