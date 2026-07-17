@@ -22,8 +22,12 @@ data/
 # IDE
 .idea/
 .vscode/
+.qoder/
 *.swp
 *.swo
+
+# 临时文件
+*_lint.out.txt
 
 # OS
 .DS_Store
