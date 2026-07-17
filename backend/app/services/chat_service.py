@@ -292,17 +292,24 @@ class ChatService:
         collection_id: str,
         top_k: int = 10,
         use_reranker: bool = True,
+        filters: Optional[dict] = None,
         db: Optional[AsyncSession] = None,
     ) -> dict:
         """语义搜索"""
         collection = await self._get_collection(collection_id, db)
 
-        results = await self.rag_engine.search(
+        # filters → Qdrant filter_condition
+        filter_condition = self._build_filter_condition(collection_id, filters, db)
+
+        engine_result = await self.rag_engine.search(
             query=query,
             collection_name=collection.qdrant_collection,
             top_k=top_k,
+            filter_condition=filter_condition,
             use_reranker=use_reranker,
         )
+        results = engine_result["results"]
+        highlight_terms = engine_result["highlight_terms"]
 
         return {
             "query": query,
@@ -314,11 +321,78 @@ class ChatService:
                     ),
                     "text": r.get("text", ""),
                     "score": r.get("score", r.get("rerank_score", 0)),
+                    "file_type": r.get("metadata", {}).get("file_type"),
+                    "uploader_username": r.get("metadata", {}).get("uploader_username"),
+                    "document_id": r.get("metadata", {}).get("document_id"),
+                    "tag_ids": r.get("metadata", {}).get("tag_ids", []) or [],
+                    "highlight_terms": highlight_terms,
                 }
                 for i, r in enumerate(results)
             ],
             "total": len(results),
+            "applied_filters": filters,
         }
+
+    @staticmethod
+    def _build_filter_condition(
+        collection_id: str,
+        filters: Optional[dict],
+        db: Optional[AsyncSession],
+    ) -> Optional[dict]:
+        """将前端 filters 转为 Qdrant filter_condition dict。
+
+        说明：
+        - file_types → file_type 字段 IN 列表
+        - uploader_ids → uploader_id 字段 IN 列表
+        - tag_ids → tag_ids 数组 contains 任意一个（用 FieldCondition.any）
+        - filename_contains → filename match text
+        """
+        if not filters:
+            return None
+        # 简化：把 dict 转成 Qdrant Filter（FieldCondition）；tag_ids 用 PayloadField("tag_ids") 的 any
+        # 此处直接构造 dict，retriever._vector_search 会 models.Filter(**dict) 解析
+        from qdrant_client.http import models
+        from sqlalchemy import select
+        from app.models.document import Document, CollectionTag
+
+        must = []
+
+        if filters.get("file_types"):
+            must.append(
+                models.FieldCondition(
+                    key="file_type",
+                    match=models.MatchAny(any=filters["file_types"]),
+                )
+            )
+
+        if filters.get("uploader_ids"):
+            must.append(
+                models.FieldCondition(
+                    key="uploader_id",
+                    match=models.MatchAny(any=filters["uploader_ids"]),
+                )
+            )
+
+        if filters.get("tag_ids"):
+            must.append(
+                models.FieldCondition(
+                    key="tag_ids",
+                    match=models.MatchAny(any=filters["tag_ids"]),
+                )
+            )
+
+        if filters.get("filename_contains"):
+            must.append(
+                models.FieldCondition(
+                    key="filename",
+                    match=models.MatchText(text=filters["filename_contains"]),
+                )
+            )
+
+        if not must:
+            return None
+
+        return {"must": [c.model_dump() for c in must]}
 
     # ===== 对话历史 CRUD =====
 

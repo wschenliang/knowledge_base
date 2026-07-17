@@ -246,19 +246,10 @@ class RAGEngine:
         filter_condition: Optional[dict] = None,
         use_reranker: bool = True,
         hybrid: bool = True,
-    ) -> list[dict]:
-        """搜索知识库 (混合检索 + 可选重排序)
+    ) -> dict:
+        """搜索知识库，返回 {results, highlight_terms}。
 
-        Args:
-            query: 查询文本
-            collection_name: Qdrant collection 名称
-            top_k: 返回结果数
-            filter_condition: 过滤条件
-            use_reranker: 是否使用重排序
-            hybrid: 是否启用混合检索 (向量+BM25)
-
-        Returns:
-            检索结果列表
+        highlight_terms 来自 BM25 命中片段中的 query 关键词，供前端高亮。
         """
         # 1. 获取查询向量
         query_vector = self.embedding_provider.get_embedding(query)
@@ -283,7 +274,14 @@ class RAGEngine:
         else:
             results = results[:top_k]
 
-        return results
+        # 4. 提取高亮命中词（基于最终 results）
+        highlight_terms = retriever.get_query_highlight_terms(
+            query_text=query,
+            top_results=results,
+            max_terms=8,
+        )
+
+        return {"results": results, "highlight_terms": highlight_terms}
 
     async def query(
         self,
