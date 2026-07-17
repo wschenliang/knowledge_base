@@ -112,6 +112,7 @@ class ChatService:
         user_id: Optional[str] = None,
         top_k: int = 5,
         use_reranker: bool = True,
+        filters: Optional[dict] = None,
         db: Optional[AsyncSession] = None,
     ) -> dict:
         """执行问答
@@ -136,14 +137,33 @@ class ChatService:
         if db:
             await self._save_message(conversation.id, "user", query, db=db)
 
+        # 构造 filter_condition
+        filter_condition = self._build_filter_condition(collection_id, filters, db)
+
         # 执行 RAG
         result = await self.rag_engine.query(
             query=query,
             collection_name=collection.qdrant_collection,
             chat_history=chat_history,
             top_k=top_k,
+            filter_condition=filter_condition,
             use_reranker=use_reranker,
         )
+
+        # 把 highlight_terms 注入每条 source
+        engine_search = await self.rag_engine.search(
+            query=query,
+            collection_name=collection.qdrant_collection,
+            top_k=top_k,
+            filter_condition=filter_condition,
+            use_reranker=use_reranker,
+        )
+        highlight_terms = engine_search["highlight_terms"]
+        sources_with_terms = []
+        for s in result.get("sources", []):
+            new_s = dict(s)
+            new_s["highlight_terms"] = highlight_terms
+            sources_with_terms.append(new_s)
 
         # 保存助手回复
         if db:
@@ -151,7 +171,7 @@ class ChatService:
                 conversation.id,
                 "assistant",
                 result["answer"],
-                sources=result.get("sources"),
+                sources=sources_with_terms,
                 db=db,
             )
 
@@ -162,7 +182,7 @@ class ChatService:
 
         return {
             "answer": result["answer"],
-            "sources": result.get("sources", []),
+            "sources": sources_with_terms,
             "conversation_id": conversation.id,
         }
 
@@ -174,12 +194,13 @@ class ChatService:
         user_id: Optional[str] = None,
         top_k: int = 5,
         use_reranker: bool = True,
+        filters: Optional[dict] = None,
         db: Optional[AsyncSession] = None,
     ) -> AsyncGenerator[str, None]:
         """流式问答 — 产出 SSE 格式的字符串
 
         SSE 事件格式:
-            data: {"type": "sources", "sources": [...]}
+            data: {"type": "sources", "sources": [...含 highlight_terms...]}
             data: {"type": "token", "content": "..."}
             data: {"type": "done", "answer": "...", "sources": [...], "conversation_id": "..."}
             data: {"type": "error", "content": "..."}
@@ -206,17 +227,21 @@ class ChatService:
         # ★ 关键修复：在 yield 前显式 commit，让会话立即可见
         await db.commit()
 
-        # ========== 阶段 2：执行检索 ==========
-        retrieved_docs = await self.rag_engine.search(
+        # ========== 阶段 2：执行检索（构造 filter_condition + 提取 highlight_terms） ==========
+        filter_condition = self._build_filter_condition(collection_id, filters, db)
+        engine_search = await self.rag_engine.search(
             query=query,
             collection_name=collection.qdrant_collection,
             top_k=top_k,
+            filter_condition=filter_condition,
             use_reranker=use_reranker,
         )
+        retrieved_docs = engine_search["results"]
+        highlight_terms = engine_search["highlight_terms"]
 
         # ========== 阶段 3：流式合成 ==========
         full_answer = ""
-        sources = []
+        sources: list[dict] = []
         try:
             async for event in self.rag_engine.synthesizer.synthesize_stream(
                 query=query,
@@ -227,7 +252,11 @@ class ChatService:
 
                 if event_type == "sources":
                     sources = event.get("sources", [])
-                    yield self._sse_event({"type": "sources", "sources": sources})
+                    # 给每条 source 注入 highlight_terms
+                    sources_with_terms = [
+                        {**s, "highlight_terms": highlight_terms} for s in sources
+                    ]
+                    yield self._sse_event({"type": "sources", "sources": sources_with_terms})
 
                 elif event_type == "token":
                     yield self._sse_event(
@@ -250,13 +279,18 @@ class ChatService:
             )
             return
 
+        # 把最终 sources 也加上 highlight_terms 后再持久化 + done 事件
+        sources_with_terms = [
+            {**s, "highlight_terms": highlight_terms} for s in sources
+        ]
+
         # ========== 阶段 4：保存助手回复、更新对话元数据、提交 ==========
         try:
             await self._save_message(
                 conversation.id,
                 "assistant",
                 full_answer,
-                sources=sources,
+                sources=sources_with_terms,
                 db=db,
             )
             # commit 后 conversation 已 detached，需重新 add 才能更新属性
@@ -276,7 +310,7 @@ class ChatService:
             {
                 "type": "done",
                 "answer": full_answer,
-                "sources": sources,
+                "sources": sources_with_terms,
                 "conversation_id": conversation.id,
             }
         )
