@@ -252,7 +252,8 @@ export default function SearchBox({ collections }: Props) {
                     score: result.score,
                     file_type: result.file_type,
                     uploader_username: result.uploader_username,
-                    highlight_terms: result.highlight_terms ?? [],
+                    tag_ids: result.tag_ids,
+                    highlight_terms: result.highlight_terms,
                   }}
                 />
               ))}

@@ -333,7 +333,7 @@ export default function ChatBox({
                     <p className="text-[15px] whitespace-pre-wrap leading-relaxed">
                       <HighlightedText
                         text={msg.content}
-                        terms={msg.sources?.[0]?.highlight_terms ?? []}
+                        terms={msg.sources?.[0]?.highlight_terms}
                       />
                     </p>
                   </div>

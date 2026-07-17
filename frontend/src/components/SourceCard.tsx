@@ -35,7 +35,7 @@ export default function SourceCard({ source }: Props) {
     return "border-l-slate-400";
   };
 
-  const highlightTerms = source.highlight_terms ?? [];
+  const highlightTerms = source.highlight_terms;
 
   return (
     <div className={`rounded-xl border border-slate-200 bg-white border-l-[3px] ${getBorderColor(source.score)} shadow-sm overflow-hidden transition-all hover:shadow-md`}>

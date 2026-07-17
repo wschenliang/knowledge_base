@@ -4,8 +4,8 @@ import { useMemo } from "react";
 
 interface HighlightedTextProps {
   text: string;
-  /** BM25 命中词（大小写不敏感） */
-  terms: string[];
+  /** BM25 命中词（大小写不敏感）；undefined 时内部归一化为空数组 */
+  terms?: string[];
   /** 高亮样式（默认琥珀色背景） */
   highlightClassName?: string;
   /** 是否大小写敏感，默认 false */

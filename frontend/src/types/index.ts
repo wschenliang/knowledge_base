@@ -107,8 +107,10 @@ export interface SourceItem {
   file_type?: string | null;
   uploader_username?: string | null;
   document_id?: string | null;
-  tag_ids?: string[];
-  highlight_terms?: string[];
+  /** 标签 ID 列表（后端 Pydantic 保证必返回数组） */
+  tag_ids: string[];
+  /** BM25 命中词（后端 Pydantic 保证必返回数组） */
+  highlight_terms: string[];
 }
 
 export interface ChatRequest {
@@ -142,8 +144,10 @@ export interface SearchResult {
   file_type?: string | null;
   uploader_username?: string | null;
   document_id?: string | null;
-  tag_ids?: string[];
-  highlight_terms?: string[];
+  /** 标签 ID 列表（后端 Pydantic 保证必返回数组） */
+  tag_ids: string[];
+  /** BM25 命中词（后端 Pydantic 保证必返回数组） */
+  highlight_terms: string[];
 }
 
 export interface SearchResponse {
