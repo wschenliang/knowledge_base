@@ -44,6 +44,13 @@ class Document(Base):
         String(20), default="pending"
     )  # pending, processing, indexed, failed
     error_message: Mapped[Optional[str]] = mapped_column(Text)
+    # 上传者：旧文档 NULL 显示「未知作者」；ON DELETE SET NULL 不级联删除文档
+    uploader_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     metadata_: Mapped[Optional[str]] = mapped_column("metadata", Text)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
