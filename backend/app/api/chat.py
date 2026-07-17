@@ -47,6 +47,12 @@ async def chat(
     )
 
     try:
+        # Pydantic filters → dict（None 字段排除）
+        filters = (
+            request.filters.model_dump(exclude_none=True)
+            if request.filters is not None
+            else None
+        )
         result = await chat_service.chat(
             query=request.query,
             collection_id=request.collection_id,
@@ -54,6 +60,7 @@ async def chat(
             user_id=current_user.id,
             top_k=request.top_k,
             use_reranker=request.use_reranker,
+            filters=filters,
             db=db,
         )
 
@@ -91,6 +98,11 @@ async def chat_stream(
 
     async def event_generator():
         try:
+            filters = (
+                request.filters.model_dump(exclude_none=True)
+                if request.filters is not None
+                else None
+            )
             async for event in chat_service.chat_stream(
                 query=request.query,
                 collection_id=request.collection_id,
@@ -98,6 +110,7 @@ async def chat_stream(
                 user_id=current_user.id,
                 top_k=request.top_k,
                 use_reranker=request.use_reranker,
+                filters=filters,
                 db=db,
             ):
                 yield event
