@@ -17,6 +17,9 @@ interface Span {
   end: number;
 }
 
+/** 模块级常量空数组，保证引用稳定（避免父组件每次渲染传 [] 导致 useMemo 失效） */
+const EMPTY_TERMS: string[] = [];
+
 /**
  * 在文本中找所有命中区间（子串匹配），合并重叠区间，再用 React 切片渲染。
  *
@@ -24,6 +27,7 @@ interface Span {
  * - 不用 dangerouslySetInnerHTML，避免 XSS
  * - 区间合并：避免嵌套 <mark>
  * - terms 中空字符串 / 长度 < 2 会被过滤
+ * - terms 为 undefined 时归一化为模块级常量 EMPTY_TERMS，避免每次渲染生成新数组导致 useMemo 失效
  */
 export default function HighlightedText({
   text,
@@ -31,8 +35,10 @@ export default function HighlightedText({
   highlightClassName = "bg-amber-200 text-slate-900 rounded px-0.5",
   caseSensitive = false,
 }: HighlightedTextProps) {
+  // H2: 归一化 terms 为稳定引用
+  const safeTerms = terms ?? EMPTY_TERMS;
   const segments = useMemo(() => {
-    const validTerms = (terms || [])
+    const validTerms = safeTerms
       .map((t) => (t || "").trim())
       .filter((t) => t.length >= 2);
     if (validTerms.length === 0 || !text) {
@@ -88,7 +94,7 @@ export default function HighlightedText({
       result.push({ key: "tail", text: text.slice(cursor), mark: false });
     }
     return result;
-  }, [text, terms, caseSensitive]);
+  }, [text, safeTerms, caseSensitive]);
 
   return (
     <>

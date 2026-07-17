@@ -39,6 +39,7 @@ export default function SearchBox({ collections }: Props) {
         if (Date.now() - ts < 5 * 60 * 1000) {
           // eslint-disable-next-line react-hooks/set-state-in-effect
           setFacets(data);
+          setFacetsLoading(false); // H1: 缓存命中分支也要重置 loading（防止切换 KB 后卡 true）
           return;
         }
       }
@@ -119,6 +120,7 @@ export default function SearchBox({ collections }: Props) {
               onChange={(e) => {
                 setSelectedCollection(e.target.value);
                 setFacets(null); // 切换 KB 时同步清空旧 facets
+                setAppliedFilters({}); // M2: 切换 KB 时一并清空筛选（避免 KB-A 的筛选误带到 KB-B）
               }}
               className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-8 py-2.5 text-sm text-slate-700 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 focus:bg-white outline-none transition-all"
             >

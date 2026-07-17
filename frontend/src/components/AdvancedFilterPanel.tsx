@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, FileText, User, Tag as TagIcon, Type, ChevronDown, Check, Filter } from "lucide-react";
 import type { SearchFilters, SearchFacetsResponse, FacetOption } from "@/types";
+import { FILE_TYPE_LABEL } from "@/lib/fileTypes";
 
 interface Props {
   open: boolean;
@@ -15,20 +16,6 @@ interface Props {
   onApply: (filters: SearchFilters) => void;
   onClose: () => void;
 }
-
-const FILE_TYPE_LABEL: Record<string, string> = {
-  pdf: "PDF",
-  docx: "Word",
-  doc: "Word",
-  md: "Markdown",
-  txt: "Text",
-  xlsx: "Excel",
-  xls: "Excel",
-  pptx: "PowerPoint",
-  ppt: "PowerPoint",
-  html: "HTML",
-  csv: "CSV",
-};
 
 export default function AdvancedFilterPanel({
   open,
